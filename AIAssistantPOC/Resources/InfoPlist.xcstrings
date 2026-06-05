@@ -13,6 +13,24 @@
         }
       }
     },
+    "NSLocalNetworkUsageDescription" : {
+      "comment" : "Permission prompt shown when the app connects to the local self-hosted STT server.",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Local network access is required to reach the speech-to-text server on your network."
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要區域網路存取以連線到本機語音辨識伺服器。"
+          }
+        }
+      }
+    },
     "NSMicrophoneUsageDescription" : {
       "comment" : "Permission prompt shown when the app first accesses the microphone.",
       "extractionState" : "stale",

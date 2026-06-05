@@ -8,6 +8,7 @@
 import SwiftUI
 import VoiceCore
 import VoiceIntelligence
+import STTCore
 
 @main
 struct AIAssistantPOCApp: App {
@@ -15,7 +16,7 @@ struct AIAssistantPOCApp: App {
     @State private var viewModel = VoiceSessionViewModel(
         recorder: AudioEngineRecorder(),
         detector: AIAssistantPOCApp.makeDetector(),
-        pipeline: StubSpeechPipeline()
+        pipeline: AIAssistantPOCApp.makePipeline()
     )
 
     var body: some Scene {
@@ -31,6 +32,14 @@ struct AIAssistantPOCApp: App {
             return SpeechEndpointDetector(scorer: SilentScorer())
         }
     }
+
+    private static func makePipeline() -> any SpeechPipeline {
+        let recognizer = WhisperSpeechRecognizer(configuration: WhisperConfiguration(baseURL: sttBaseURL))
+        return SttSpeechPipeline(recognizer: recognizer)
+    }
+    
+    // hardcode URL for demo. Use `ipconfig getifaddr en1` to check IP.
+    private static let sttBaseURL = URL(string: "http://192.168.0.35:8000")!
 }
 
 struct SilentScorer: SpeechProbabilityScoring {
