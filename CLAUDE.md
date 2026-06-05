@@ -41,7 +41,8 @@ The project strictly implements Clean Architecture across local SPM modules to e
 ### 4.1 VoiceAgentKit (Local SPM)
 This package contains the core infrastructure and domain logic, divided into specialized targets:
 - **`VoiceCore` Target:** Handles hardware audio dependencies (`AVFoundation`, `AVAudioEngine`). Encapsulates VAD (Voice Activity Detection), audio capturing, and TTS playback. Must ensure thread-safe hardware access via `actor`.
-- **`AICore` Target:** Pure stateless networking layer. Handles STT (Fast-Whisper via HTTP) and LLM (OpenAI SSE streams). Strictly no UI or `AVFoundation` imports here.
+- **`STTCore` Target:** Pure stateless networking layer for Speech-to-Text (self-hosted Whisper via HTTP). Strictly no UI or `AVFoundation` imports. Exposes a `SpeechRecognizing` protocol so the backend (Whisper, on-device fallback, or a composed fallback) is swappable.
+- **`LLMCore` Target:** Pure stateless networking layer for the LLM (e.g. OpenAI SSE streams). Kept separate from `STTCore` so STT and LLM have single responsibilities and can each be replaced independently. Strictly no UI or `AVFoundation` imports.
 - **`VisionCore` Target:** Handles `AVCaptureSession` and Face Detection (Google ML Kit).
 
 ### 4.2 Main App Target (Presentation Only)
