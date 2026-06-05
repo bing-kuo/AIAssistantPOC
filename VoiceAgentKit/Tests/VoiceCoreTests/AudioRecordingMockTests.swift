@@ -47,8 +47,8 @@ struct AudioRecordingMockTests {
     func startStreamsFrames() async throws {
         // Given
         let frames = [
-            AudioFrame(frameCount: 1024, rms: 0.1, timestamp: 0),
-            AudioFrame(frameCount: 1024, rms: 0.2, timestamp: 0.02),
+            AudioFrame(samples: [0.1, -0.1], frameCount: 2, rms: 0.1, timestamp: 0),
+            AudioFrame(samples: [0.2, -0.2], frameCount: 2, rms: 0.2, timestamp: 0.02),
         ]
         let sut = MockAudioRecorder(permission: true, framesToEmit: frames)
 
