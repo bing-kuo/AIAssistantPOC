@@ -16,7 +16,10 @@ public enum AudioRecorderState: Sendable, Equatable {
 /// A lightweight, thread-safe snapshot of a captured audio buffer.
 public struct AudioFrame: Sendable, Equatable {
 
-    /// The number of PCM frames contained within the captured buffer.
+    /// The captured PCM samples, resampled to 16 kHz mono Float32 for downstream speech processing.
+    public let samples: [Float]
+
+    /// The number of PCM frames contained within ``samples``.
     public let frameCount: Int
 
     /// The Root-Mean-Square (RMS) amplitude representing the current audio loudness.
@@ -25,7 +28,8 @@ public struct AudioFrame: Sendable, Equatable {
     /// The precise capture timestamp in seconds, measured on the audio host clock.
     public let timestamp: TimeInterval
 
-    public init(frameCount: Int, rms: Float, timestamp: TimeInterval) {
+    public init(samples: [Float], frameCount: Int, rms: Float, timestamp: TimeInterval) {
+        self.samples = samples
         self.frameCount = frameCount
         self.rms = rms
         self.timestamp = timestamp

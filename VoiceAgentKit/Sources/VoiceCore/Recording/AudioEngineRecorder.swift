@@ -13,6 +13,7 @@ public actor AudioEngineRecorder: AudioRecording {
     private var continuation: AsyncStream<AudioFrame>.Continuation?
     private var state: AudioRecorderState = .idle
     private let bufferSize: AVAudioFrameCount = 1024
+    private let targetSampleRate: Double = 16_000
 
     public init() {}
 
@@ -52,17 +53,20 @@ public actor AudioEngineRecorder: AudioRecording {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         let sampleRate = format.sampleRate
-        
-        let recorderLog = VoiceLog.recorder
+
+        guard let downsampler = AudioDownsampler(inputFormat: format, targetSampleRate: targetSampleRate) else {
+            continuation.finish()
+            self.continuation = nil
+            state = .failed
+            VoiceLog.recorder.error("Failed to create 16 kHz audio converter from input format")
+            throw AudioRecorderError.engineStartFailed("Unsupported input format for resampling")
+        }
+
         input.installTap(onBus: 0, bufferSize: bufferSize, format: format) { buffer, when in
-            guard let channelData = buffer.floatChannelData else { return }
-            let frameCount = Int(buffer.frameLength)
-            let samples = UnsafeBufferPointer(start: channelData[0], count: frameCount)
+            guard let samples = downsampler.downsample(buffer), !samples.isEmpty else { return }
             let rms = AudioMath.rms(samples)
             let timestamp = sampleRate > 0 ? Double(when.sampleTime) / sampleRate : 0
-            
-            recorderLog.info("Captured audio frame: frames=\(frameCount, privacy: .public), rms=\(rms, privacy: .public)")
-            continuation.yield(AudioFrame(frameCount: frameCount, rms: rms, timestamp: timestamp))
+            continuation.yield(AudioFrame(samples: samples, frameCount: samples.count, rms: rms, timestamp: timestamp))
         }
 
         engine.prepare()
@@ -107,11 +111,14 @@ public actor AudioEngineRecorder: AudioRecording {
         do {
             try session.setCategory(
                 .playAndRecord,
-                mode: .voiceChat,
+                mode: .measurement,
                 options: [.allowBluetooth, .defaultToSpeaker]
             )
             try session.setActive(true)
-            VoiceLog.session.info("AVAudioSession configured for playAndRecord with voiceChat mode")
+            if session.isInputGainSettable {
+                try? session.setInputGain(1.0)
+            }
+            VoiceLog.session.info("AVAudioSession configured: measurement mode, inputGain=\(session.inputGain, privacy: .public), gainSettable=\(session.isInputGainSettable, privacy: .public)")
         } catch {
             VoiceLog.session.error("AVAudioSession configuration failed: \(error.localizedDescription, privacy: .public)")
             throw AudioRecorderError.sessionConfigFailed(error.localizedDescription)
