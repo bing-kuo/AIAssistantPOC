@@ -6,12 +6,16 @@
 //
 
 import SwiftUI
+import VoiceCore
 
 @main
 struct AIAssistantPOCApp: App {
+
+    @State private var viewModel = RecorderViewModel(recorder: AudioEngineRecorder())
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            RecorderView(viewModel: viewModel)
         }
     }
 }
