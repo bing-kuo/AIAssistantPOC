@@ -38,13 +38,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Failed to start recording"
+            "value" : "Something went wrong"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "錄音啟動失敗"
+            "value" : "發生錯誤"
           }
         }
       }
@@ -65,50 +65,66 @@
         }
       }
     },
-    "status.permissionDenied" : {
+    "status.listening" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Microphone permission denied"
+            "value" : "Listening…"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "麥克風權限被拒絕"
+            "value" : "聆聽中…"
           }
         }
       }
     },
-    "status.recording" : {
+    "status.processing" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Recording…"
+            "value" : "Processing…"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "錄音中…"
+            "value" : "處理中…"
           }
         }
       }
     },
-    "status.stopped" : {
+    "status.result" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Stopped"
+            "value" : "Result"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已停止"
+            "value" : "結果"
+          }
+        }
+      }
+    },
+    "status.speaking" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speaking…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "說話中…"
           }
         }
       }
