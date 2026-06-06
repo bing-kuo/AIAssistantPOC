@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import VoiceActivityDetection
+import VoiceAgentDomain
 
 struct RecorderView: View {
     @State private var viewModel: VoiceSessionViewModel
@@ -119,7 +119,7 @@ extension SessionState {
     RecorderView(
         viewModel: VoiceSessionViewModel(
             recorder: PreviewAudioRecorder(),
-            detector: SpeechEndpointDetector(scorer: SilentScorer()),
+            detector: PreviewVoiceActivityDetector(),
             pipeline: StubSpeechPipeline(),
             conversation: PreviewConversationManager(),
             synthesizer: PreviewSpeechSynthesizer()
