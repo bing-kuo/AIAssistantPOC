@@ -5,7 +5,7 @@
 
 import Foundation
 import Testing
-import LLMCore
+import VoiceAgentDomain
 @testable import AIAssistantPOC
 
 private final class RecordingResponder: LLMResponding, @unchecked Sendable {

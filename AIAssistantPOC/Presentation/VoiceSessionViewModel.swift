@@ -4,9 +4,7 @@
 //
 
 import Observation
-import VoiceCore
-import VoiceIntelligence
-import TTSCore
+import VoiceAgentDomain
 
 enum SessionState: Equatable, Sendable {
     case idle

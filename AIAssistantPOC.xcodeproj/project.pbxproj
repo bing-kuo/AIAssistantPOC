@@ -7,11 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AA0001AA2FD26BE800E61B4C /* VoiceCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0003AA2FD26BE800E61B4C /* VoiceCore */; };
-		AA0004AA2FD26BE800E61B4C /* VoiceIntelligence in Frameworks */ = {isa = PBXBuildFile; productRef = AA0005AA2FD26BE800E61B4C /* VoiceIntelligence */; };
-		AA0010AA2FD26BE800E61B4C /* STTCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0011AA2FD26BE800E61B4C /* STTCore */; };
-		AA0012AA2FD26BE800E61B4C /* LLMCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0013AA2FD26BE800E61B4C /* LLMCore */; };
-		AA0014AA2FD26BE800E61B4C /* TTSCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0015AA2FD26BE800E61B4C /* TTSCore */; };
+		AA0001AA2FD26BE800E61B4C /* AVAudioCapture in Frameworks */ = {isa = PBXBuildFile; productRef = AA0003AA2FD26BE800E61B4C /* AVAudioCapture */; };
+		AA0004AA2FD26BE800E61B4C /* VoiceActivityDetection in Frameworks */ = {isa = PBXBuildFile; productRef = AA0005AA2FD26BE800E61B4C /* VoiceActivityDetection */; };
+		AA0010AA2FD26BE800E61B4C /* WhisperSTT in Frameworks */ = {isa = PBXBuildFile; productRef = AA0011AA2FD26BE800E61B4C /* WhisperSTT */; };
+		AA0012AA2FD26BE800E61B4C /* ProxyLLM in Frameworks */ = {isa = PBXBuildFile; productRef = AA0013AA2FD26BE800E61B4C /* ProxyLLM */; };
+		AA0014AA2FD26BE800E61B4C /* AppleTTS in Frameworks */ = {isa = PBXBuildFile; productRef = AA0015AA2FD26BE800E61B4C /* AppleTTS */; };
+		AA0016AA2FD26BE800E61B4C /* VoiceAgentDomain in Frameworks */ = {isa = PBXBuildFile; productRef = AA0017AA2FD26BE800E61B4C /* VoiceAgentDomain */; };
+		AA0018AA2FD26BE800E61B4C /* SileroVAD in Frameworks */ = {isa = PBXBuildFile; productRef = AA0019AA2FD26BE800E61B4C /* SileroVAD */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,11 +62,13 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				AA0001AA2FD26BE800E61B4C /* VoiceCore in Frameworks */,
-				AA0004AA2FD26BE800E61B4C /* VoiceIntelligence in Frameworks */,
-				AA0010AA2FD26BE800E61B4C /* STTCore in Frameworks */,
-				AA0012AA2FD26BE800E61B4C /* LLMCore in Frameworks */,
-				AA0014AA2FD26BE800E61B4C /* TTSCore in Frameworks */,
+				AA0001AA2FD26BE800E61B4C /* AVAudioCapture in Frameworks */,
+				AA0004AA2FD26BE800E61B4C /* VoiceActivityDetection in Frameworks */,
+				AA0010AA2FD26BE800E61B4C /* WhisperSTT in Frameworks */,
+				AA0012AA2FD26BE800E61B4C /* ProxyLLM in Frameworks */,
+				AA0014AA2FD26BE800E61B4C /* AppleTTS in Frameworks */,
+				AA0016AA2FD26BE800E61B4C /* VoiceAgentDomain in Frameworks */,
+				AA0018AA2FD26BE800E61B4C /* SileroVAD in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -125,11 +129,13 @@
 			);
 			name = AIAssistantPOC;
 			packageProductDependencies = (
-				AA0003AA2FD26BE800E61B4C /* VoiceCore */,
-				AA0005AA2FD26BE800E61B4C /* VoiceIntelligence */,
-				AA0011AA2FD26BE800E61B4C /* STTCore */,
-				AA0013AA2FD26BE800E61B4C /* LLMCore */,
-				AA0015AA2FD26BE800E61B4C /* TTSCore */,
+				AA0003AA2FD26BE800E61B4C /* AVAudioCapture */,
+				AA0005AA2FD26BE800E61B4C /* VoiceActivityDetection */,
+				AA0011AA2FD26BE800E61B4C /* WhisperSTT */,
+				AA0013AA2FD26BE800E61B4C /* ProxyLLM */,
+				AA0015AA2FD26BE800E61B4C /* AppleTTS */,
+				AA0017AA2FD26BE800E61B4C /* VoiceAgentDomain */,
+				AA0019AA2FD26BE800E61B4C /* SileroVAD */,
 			);
 			productName = AIAssistantPOC;
 			productReference = 375381EC2FD26BE600E61B4C /* AIAssistantPOC.app */;
@@ -648,25 +654,33 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		AA0003AA2FD26BE800E61B4C /* VoiceCore */ = {
+		AA0003AA2FD26BE800E61B4C /* AVAudioCapture */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = VoiceCore;
+			productName = AVAudioCapture;
 		};
-		AA0005AA2FD26BE800E61B4C /* VoiceIntelligence */ = {
+		AA0005AA2FD26BE800E61B4C /* VoiceActivityDetection */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = VoiceIntelligence;
+			productName = VoiceActivityDetection;
 		};
-		AA0011AA2FD26BE800E61B4C /* STTCore */ = {
+		AA0011AA2FD26BE800E61B4C /* WhisperSTT */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = STTCore;
+			productName = WhisperSTT;
 		};
-		AA0013AA2FD26BE800E61B4C /* LLMCore */ = {
+		AA0013AA2FD26BE800E61B4C /* ProxyLLM */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = LLMCore;
+			productName = ProxyLLM;
 		};
-		AA0015AA2FD26BE800E61B4C /* TTSCore */ = {
+		AA0015AA2FD26BE800E61B4C /* AppleTTS */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = TTSCore;
+			productName = AppleTTS;
+		};
+		AA0017AA2FD26BE800E61B4C /* VoiceAgentDomain */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = VoiceAgentDomain;
+		};
+		AA0019AA2FD26BE800E61B4C /* SileroVAD */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = SileroVAD;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

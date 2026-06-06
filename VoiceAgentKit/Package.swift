@@ -9,11 +9,13 @@ let package = Package(
         .visionOS("26.0"),
     ],
     products: [
-        .library(name: "VoiceCore", targets: ["VoiceCore"]),
-        .library(name: "VoiceIntelligence", targets: ["VoiceIntelligence"]),
-        .library(name: "STTCore", targets: ["STTCore"]),
-        .library(name: "LLMCore", targets: ["LLMCore"]),
-        .library(name: "TTSCore", targets: ["TTSCore"]),
+        .library(name: "VoiceAgentDomain", targets: ["VoiceAgentDomain"]),
+        .library(name: "AVAudioCapture", targets: ["AVAudioCapture"]),
+        .library(name: "VoiceActivityDetection", targets: ["VoiceActivityDetection"]),
+        .library(name: "SileroVAD", targets: ["SileroVAD"]),
+        .library(name: "WhisperSTT", targets: ["WhisperSTT"]),
+        .library(name: "ProxyLLM", targets: ["ProxyLLM"]),
+        .library(name: "AppleTTS", targets: ["AppleTTS"]),
     ],
     dependencies: [
         .package(
@@ -23,21 +25,50 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "VoiceCore",
+            name: "VoiceAgentDomain",
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
         ),
         .testTarget(
-            name: "VoiceCoreTests",
-            dependencies: ["VoiceCore"],
+            name: "VoiceAgentDomainTests",
+            dependencies: ["VoiceAgentDomain"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
         ),
         .target(
-            name: "VoiceIntelligence",
+            name: "AVAudioCapture",
+            dependencies: ["VoiceAgentDomain"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .testTarget(
+            name: "AVAudioCaptureTests",
+            dependencies: ["AVAudioCapture"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .target(
+            name: "VoiceActivityDetection",
+            dependencies: ["VoiceAgentDomain"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .testTarget(
+            name: "VoiceActivityDetectionTests",
+            dependencies: ["VoiceActivityDetection", "SileroVAD", "AVAudioCapture"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .target(
+            name: "SileroVAD",
             dependencies: [
+                "VoiceAgentDomain",
                 .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
             ],
             resources: [
@@ -48,47 +79,50 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "VoiceIntelligenceTests",
-            dependencies: ["VoiceIntelligence", "VoiceCore"],
+            name: "SileroVADTests",
+            dependencies: ["SileroVAD"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
         ),
         .target(
-            name: "STTCore",
+            name: "WhisperSTT",
+            dependencies: ["VoiceAgentDomain"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
         ),
         .testTarget(
-            name: "STTCoreTests",
-            dependencies: ["STTCore"],
+            name: "WhisperSTTTests",
+            dependencies: ["WhisperSTT"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
         ),
         .target(
-            name: "LLMCore",
+            name: "ProxyLLM",
+            dependencies: ["VoiceAgentDomain"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
         ),
         .testTarget(
-            name: "LLMCoreTests",
-            dependencies: ["LLMCore"],
+            name: "ProxyLLMTests",
+            dependencies: ["ProxyLLM"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
         ),
         .target(
-            name: "TTSCore",
+            name: "AppleTTS",
+            dependencies: ["VoiceAgentDomain"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]
         ),
         .testTarget(
-            name: "TTSCoreTests",
-            dependencies: ["TTSCore"],
+            name: "AppleTTSTests",
+            dependencies: ["AppleTTS"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]

@@ -4,9 +4,7 @@
 //
 
 import Testing
-import VoiceCore
-import VoiceIntelligence
-import TTSCore
+import VoiceAgentDomain
 @testable import AIAssistantPOC
 
 private actor MockRecording: AudioRecording {
