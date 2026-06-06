@@ -3,7 +3,7 @@
 //  AIAssistantPOC
 //
 
-import TTSCore
+import VoiceAgentDomain
 
 struct PreviewSpeechSynthesizer: SpeechSynthesizing {
     func speak(_ text: String) async throws {}

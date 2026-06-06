@@ -6,11 +6,13 @@
 //
 
 import SwiftUI
-import VoiceCore
-import VoiceIntelligence
-import STTCore
-import LLMCore
-import TTSCore
+import VoiceAgentDomain
+import AVAudioCapture
+import VoiceActivityDetection
+import SileroVAD
+import WhisperSTT
+import ProxyLLM
+import AppleTTS
 
 @main
 struct AIAssistantPOCApp: App {

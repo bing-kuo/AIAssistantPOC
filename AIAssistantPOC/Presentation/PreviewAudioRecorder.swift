@@ -3,7 +3,7 @@
 //  AIAssistantPOC
 //
 
-import VoiceCore
+import VoiceAgentDomain
 
 struct PreviewAudioRecorder: AudioRecording {
     func requestPermission() async -> Bool { true }

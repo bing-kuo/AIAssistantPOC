@@ -6,7 +6,7 @@
 //
 
 import SwiftUI
-import VoiceIntelligence
+import VoiceActivityDetection
 
 struct RecorderView: View {
     @State private var viewModel: VoiceSessionViewModel

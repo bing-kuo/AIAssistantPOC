@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import STTCore
+import VoiceAgentDomain
 
 protocol SpeechPipeline: Sendable {
     func process(_ audio: [Float]) async throws -> String

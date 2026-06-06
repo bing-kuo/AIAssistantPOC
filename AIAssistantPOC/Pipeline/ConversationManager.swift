@@ -4,7 +4,7 @@
 //
 
 import Foundation
-import LLMCore
+import VoiceAgentDomain
 
 actor ConversationManager: ConversationManaging {
 
