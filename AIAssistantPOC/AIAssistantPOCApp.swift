@@ -9,6 +9,7 @@ import SwiftUI
 import VoiceCore
 import VoiceIntelligence
 import STTCore
+import LLMCore
 
 @main
 struct AIAssistantPOCApp: App {
@@ -16,7 +17,8 @@ struct AIAssistantPOCApp: App {
     @State private var viewModel = VoiceSessionViewModel(
         recorder: AudioEngineRecorder(),
         detector: AIAssistantPOCApp.makeDetector(),
-        pipeline: AIAssistantPOCApp.makePipeline()
+        pipeline: AIAssistantPOCApp.makePipeline(),
+        conversation: AIAssistantPOCApp.makeConversation()
     )
 
     var body: some Scene {
@@ -34,12 +36,22 @@ struct AIAssistantPOCApp: App {
     }
 
     private static func makePipeline() -> any SpeechPipeline {
-        let recognizer = WhisperSpeechRecognizer(configuration: WhisperConfiguration(baseURL: sttBaseURL))
+        let recognizer = WhisperSpeechRecognizer(configuration: WhisperConfiguration(baseURL: serverBaseURL))
         return SttSpeechPipeline(recognizer: recognizer)
     }
-    
+
+    private static func makeConversation() -> any ConversationManaging {
+        let responder = ProxyLLMResponder(configuration: LLMConfiguration(baseURL: serverBaseURL))
+        return ConversationManager(responder: responder, systemPrompt: systemPrompt)
+    }
+
     // hardcode URL for demo. Use `ipconfig getifaddr en1` to check IP.
-    private static let sttBaseURL = URL(string: "http://192.168.0.35:8000")!
+    private static let serverBaseURL = URL(string: "http://192.168.0.35:8000")!
+
+    private static let systemPrompt = """
+    You are a concise, friendly voice assistant. Keep replies short and natural for speech. \
+    Reply in the same language the user speaks.
+    """
 }
 
 struct SilentScorer: SpeechProbabilityScoring {

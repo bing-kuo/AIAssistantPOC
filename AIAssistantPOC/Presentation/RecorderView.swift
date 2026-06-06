@@ -26,13 +26,7 @@ struct RecorderView: View {
             Text(viewModel.state.localizationKey)
                 .font(.headline)
 
-            if case .result(let text) = viewModel.state {
-                Text(text)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 280)
-            }
+            conversation
 
             ProgressView(value: Double(min(max(viewModel.lastRMS * 4, 0), 1)))
                 .progressViewStyle(.linear)
@@ -54,6 +48,33 @@ struct RecorderView: View {
         .padding()
         .animation(.default, value: viewModel.state)
     }
+
+    @ViewBuilder
+    private var conversation: some View {
+        VStack(spacing: 12) {
+            if let userText = viewModel.lastUserText {
+                bubble(label: "conversation.you", text: userText, tint: .blue)
+            }
+            if !viewModel.answer.isEmpty {
+                bubble(label: "conversation.assistant", text: viewModel.answer, tint: .green)
+            }
+        }
+        .frame(maxWidth: 300)
+    }
+
+    private func bubble(label: LocalizedStringKey, text: String, tint: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(tint)
+            Text(text)
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .multilineTextAlignment(.leading)
+        }
+        .padding(12)
+        .background(tint.opacity(0.1), in: .rect(cornerRadius: 12))
+    }
 }
 
 extension SessionState {
@@ -63,7 +84,7 @@ extension SessionState {
         case .listening: "status.listening"
         case .speaking: "status.speaking"
         case .processing: "status.processing"
-        case .result: "status.result"
+        case .responding: "status.responding"
         case .failed: "status.failed"
         }
     }
@@ -74,7 +95,7 @@ extension SessionState {
         case .listening: "ear.badge.waveform"
         case .speaking: "waveform.circle.fill"
         case .processing: "gearshape.circle.fill"
-        case .result: "checkmark.circle.fill"
+        case .responding: "bubble.left.and.text.bubble.right.fill"
         case .failed: "exclamationmark.triangle.fill"
         }
     }
@@ -85,7 +106,7 @@ extension SessionState {
         case .listening: .blue
         case .speaking: .red
         case .processing: .orange
-        case .result: .green
+        case .responding: .green
         case .failed: .yellow
         }
     }
@@ -96,7 +117,8 @@ extension SessionState {
         viewModel: VoiceSessionViewModel(
             recorder: PreviewAudioRecorder(),
             detector: SpeechEndpointDetector(scorer: SilentScorer()),
-            pipeline: StubSpeechPipeline()
+            pipeline: StubSpeechPipeline(),
+            conversation: PreviewConversationManager()
         )
     )
 }

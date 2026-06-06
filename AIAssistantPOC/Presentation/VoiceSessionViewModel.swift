@@ -12,7 +12,7 @@ enum SessionState: Equatable, Sendable {
     case listening
     case speaking
     case processing
-    case result(String)
+    case responding
     case failed
 }
 
@@ -23,26 +23,31 @@ final class VoiceSessionViewModel {
     private let recorder: any AudioRecording
     private let detector: any VoiceActivityDetecting
     private let pipeline: any SpeechPipeline
+    private let conversation: any ConversationManaging
     private var sessionTask: Task<Void, Never>?
 
     private(set) var state: SessionState = .idle
     private(set) var lastRMS: Float = 0
+    private(set) var lastUserText: String?
+    private(set) var answer: String = ""
 
     var isActive: Bool {
         switch state {
-        case .idle, .result, .failed: false
-        case .listening, .speaking, .processing: true
+        case .idle, .failed: false
+        case .listening, .speaking, .processing, .responding: true
         }
     }
 
     init(
         recorder: any AudioRecording,
         detector: any VoiceActivityDetecting,
-        pipeline: any SpeechPipeline
+        pipeline: any SpeechPipeline,
+        conversation: any ConversationManaging
     ) {
         self.recorder = recorder
         self.detector = detector
         self.pipeline = pipeline
+        self.conversation = conversation
     }
 
     func toggle() async {
@@ -60,6 +65,9 @@ final class VoiceSessionViewModel {
         }
 
         await detector.reset()
+        await conversation.reset()
+        lastUserText = nil
+        answer = ""
 
         do {
             let frames = try await recorder.start()
@@ -102,9 +110,19 @@ final class VoiceSessionViewModel {
         state = .processing
         do {
             let text = try await pipeline.process(segment)
-            state = .result(text)
+            guard !text.isEmpty else {
+                state = .listening
+                return
+            }
+            lastUserText = text
+            answer = ""
+            state = .responding
+            for try await delta in conversation.respond(to: text) {
+                answer += delta
+            }
+            state = .listening
         } catch {
-            state = .failed
+            if !Task.isCancelled { state = .failed }
         }
     }
 

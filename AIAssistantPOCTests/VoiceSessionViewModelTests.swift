@@ -53,13 +53,25 @@ private struct ImmediatePipeline: SpeechPipeline {
     func process(_ audio: [Float]) async throws -> String { output }
 }
 
+private struct ScriptedConversation: ConversationManaging {
+    let deltas: [String]
+    func respond(to userText: String) -> AsyncThrowingStream<String, Error> {
+        let deltas = deltas
+        return AsyncThrowingStream { continuation in
+            for delta in deltas { continuation.yield(delta) }
+            continuation.finish()
+        }
+    }
+    func reset() async {}
+}
+
 @MainActor
 private func wait(
     for viewModel: VoiceSessionViewModel,
-    until predicate: @escaping (SessionState) -> Bool
+    until predicate: @escaping (VoiceSessionViewModel) -> Bool
 ) async {
     for _ in 0..<200 {
-        if predicate(viewModel.state) { return }
+        if predicate(viewModel) { return }
         try? await Task.sleep(for: .milliseconds(10))
     }
 }
@@ -72,20 +84,28 @@ private func frame() -> AudioFrame {
 @Suite("VoiceSessionViewModel")
 struct VoiceSessionViewModelTests {
 
-    @Test("auto-switches idle → speaking → processing → result on a detected utterance")
+    @Test("auto-switches through speaking → processing → responding then streams the reply")
     func autoSwitchesThroughStates() async {
-        // Given a recorder that emits frames and a detector that scripts a full utterance
+        // Given a detector scripting a full utterance and a conversation streaming a reply
         let recorder = MockRecording(frames: [frame(), frame()])
         let detector = MockDetector(scriptedEvents: [.speechStarted, .speechEnded(segment: [0.2, 0.2])])
-        let pipeline = ImmediatePipeline(output: "ANSWER")
-        let sut = VoiceSessionViewModel(recorder: recorder, detector: detector, pipeline: pipeline)
+        let pipeline = ImmediatePipeline(output: "HELLO")
+        let conversation = ScriptedConversation(deltas: ["Hi", " there"])
+        let sut = VoiceSessionViewModel(
+            recorder: recorder,
+            detector: detector,
+            pipeline: pipeline,
+            conversation: conversation
+        )
 
         // When the user starts the session
         await sut.toggle()
 
-        // Then the state machine settles on the pipeline result
-        await wait(for: sut) { if case .result = $0 { return true } else { return false } }
-        #expect(sut.state == .result("ANSWER"))
+        // Then the transcription drives the prompt and the reply streams in
+        await wait(for: sut) { $0.answer == "Hi there" }
+        #expect(sut.lastUserText == "HELLO")
+        #expect(sut.answer == "Hi there")
+        #expect(sut.state == .listening)
     }
 
     @Test("denied microphone permission moves to failed")
@@ -96,7 +116,8 @@ struct VoiceSessionViewModelTests {
         let sut = VoiceSessionViewModel(
             recorder: recorder,
             detector: detector,
-            pipeline: ImmediatePipeline(output: "")
+            pipeline: ImmediatePipeline(output: ""),
+            conversation: ScriptedConversation(deltas: [])
         )
 
         // When
@@ -114,7 +135,8 @@ struct VoiceSessionViewModelTests {
         let sut = VoiceSessionViewModel(
             recorder: recorder,
             detector: detector,
-            pipeline: ImmediatePipeline(output: "")
+            pipeline: ImmediatePipeline(output: ""),
+            conversation: ScriptedConversation(deltas: [])
         )
 
         // When started then toggled again
