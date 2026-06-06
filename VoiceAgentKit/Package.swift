@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "VoiceCore", targets: ["VoiceCore"]),
         .library(name: "VoiceIntelligence", targets: ["VoiceIntelligence"]),
         .library(name: "STTCore", targets: ["STTCore"]),
+        .library(name: "LLMCore", targets: ["LLMCore"]),
     ],
     dependencies: [
         .package(
@@ -61,6 +62,19 @@ let package = Package(
         .testTarget(
             name: "STTCoreTests",
             dependencies: ["STTCore"],
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .target(
+            name: "LLMCore",
+            swiftSettings: [
+                .swiftLanguageMode(.v6),
+            ]
+        ),
+        .testTarget(
+            name: "LLMCoreTests",
+            dependencies: ["LLMCore"],
             swiftSettings: [
                 .swiftLanguageMode(.v6),
             ]

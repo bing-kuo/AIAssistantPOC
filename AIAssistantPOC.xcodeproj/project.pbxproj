@@ -10,6 +10,7 @@
 		AA0001AA2FD26BE800E61B4C /* VoiceCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0003AA2FD26BE800E61B4C /* VoiceCore */; };
 		AA0004AA2FD26BE800E61B4C /* VoiceIntelligence in Frameworks */ = {isa = PBXBuildFile; productRef = AA0005AA2FD26BE800E61B4C /* VoiceIntelligence */; };
 		AA0010AA2FD26BE800E61B4C /* STTCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0011AA2FD26BE800E61B4C /* STTCore */; };
+		AA0012AA2FD26BE800E61B4C /* LLMCore in Frameworks */ = {isa = PBXBuildFile; productRef = AA0013AA2FD26BE800E61B4C /* LLMCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,6 +62,7 @@
 				AA0001AA2FD26BE800E61B4C /* VoiceCore in Frameworks */,
 				AA0004AA2FD26BE800E61B4C /* VoiceIntelligence in Frameworks */,
 				AA0010AA2FD26BE800E61B4C /* STTCore in Frameworks */,
+				AA0012AA2FD26BE800E61B4C /* LLMCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -124,6 +126,7 @@
 				AA0003AA2FD26BE800E61B4C /* VoiceCore */,
 				AA0005AA2FD26BE800E61B4C /* VoiceIntelligence */,
 				AA0011AA2FD26BE800E61B4C /* STTCore */,
+				AA0013AA2FD26BE800E61B4C /* LLMCore */,
 			);
 			productName = AIAssistantPOC;
 			productReference = 375381EC2FD26BE600E61B4C /* AIAssistantPOC.app */;
@@ -414,7 +417,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Config/Info.plist";
+				INFOPLIST_FILE = Config/Info.plist;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -459,7 +462,7 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "Config/Info.plist";
+				INFOPLIST_FILE = Config/Info.plist;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -653,6 +656,10 @@
 		AA0011AA2FD26BE800E61B4C /* STTCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = STTCore;
+		};
+		AA0013AA2FD26BE800E61B4C /* LLMCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = LLMCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
