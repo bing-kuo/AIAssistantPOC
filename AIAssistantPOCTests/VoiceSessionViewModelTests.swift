@@ -6,6 +6,7 @@
 import Testing
 import VoiceCore
 import VoiceIntelligence
+import TTSCore
 @testable import AIAssistantPOC
 
 private actor MockRecording: AudioRecording {
@@ -65,6 +66,24 @@ private struct ScriptedConversation: ConversationManaging {
     func reset() async {}
 }
 
+private actor GatedSynthesizer: SpeechSynthesizing {
+    private(set) var spokenText: String?
+    private(set) var stopCount = 0
+    private var continuation: CheckedContinuation<Void, Never>?
+    private let gated: Bool
+
+    init(gated: Bool = false) { self.gated = gated }
+
+    func speak(_ text: String) async throws {
+        spokenText = text
+        guard gated else { return }
+        await withCheckedContinuation { self.continuation = $0 }
+    }
+
+    func release() { continuation?.resume(); continuation = nil }
+    func stop() async { stopCount += 1 }
+}
+
 @MainActor
 private func wait(
     for viewModel: VoiceSessionViewModel,
@@ -84,27 +103,37 @@ private func frame() -> AudioFrame {
 @Suite("VoiceSessionViewModel")
 struct VoiceSessionViewModelTests {
 
-    @Test("auto-switches through speaking → processing → responding then streams the reply")
+    @Test("auto-switches through speaking → processing → responding → playing → listening")
     func autoSwitchesThroughStates() async {
-        // Given a detector scripting a full utterance and a conversation streaming a reply
+        // Given a detector scripting a full utterance, a streamed reply, and a gated synthesizer
         let recorder = MockRecording(frames: [frame(), frame()])
         let detector = MockDetector(scriptedEvents: [.speechStarted, .speechEnded(segment: [0.2, 0.2])])
         let pipeline = ImmediatePipeline(output: "HELLO")
         let conversation = ScriptedConversation(deltas: ["Hi", " there"])
+        let synthesizer = GatedSynthesizer(gated: true)
         let sut = VoiceSessionViewModel(
             recorder: recorder,
             detector: detector,
             pipeline: pipeline,
-            conversation: conversation
+            conversation: conversation,
+            synthesizer: synthesizer
         )
 
         // When the user starts the session
         await sut.toggle()
 
-        // Then the transcription drives the prompt and the reply streams in
-        await wait(for: sut) { $0.answer == "Hi there" }
+        // Then the reply is synthesized while the state is .playing
+        for _ in 0..<200 {
+            if await synthesizer.spokenText == "Hi there" { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         #expect(sut.lastUserText == "HELLO")
-        #expect(sut.answer == "Hi there")
+        #expect(await synthesizer.spokenText == "Hi there")
+        #expect(sut.state == .playing)
+
+        // And after playback finishes it returns to listening
+        await synthesizer.release()
+        await wait(for: sut) { $0.state == .listening }
         #expect(sut.state == .listening)
     }
 
@@ -117,7 +146,8 @@ struct VoiceSessionViewModelTests {
             recorder: recorder,
             detector: detector,
             pipeline: ImmediatePipeline(output: ""),
-            conversation: ScriptedConversation(deltas: [])
+            conversation: ScriptedConversation(deltas: []),
+            synthesizer: GatedSynthesizer()
         )
 
         // When
@@ -136,7 +166,8 @@ struct VoiceSessionViewModelTests {
             recorder: recorder,
             detector: detector,
             pipeline: ImmediatePipeline(output: ""),
-            conversation: ScriptedConversation(deltas: [])
+            conversation: ScriptedConversation(deltas: []),
+            synthesizer: GatedSynthesizer()
         )
 
         // When started then toggled again

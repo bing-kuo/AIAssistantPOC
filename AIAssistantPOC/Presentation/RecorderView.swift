@@ -85,6 +85,7 @@ extension SessionState {
         case .speaking: "status.speaking"
         case .processing: "status.processing"
         case .responding: "status.responding"
+        case .playing: "status.playing"
         case .failed: "status.failed"
         }
     }
@@ -96,6 +97,7 @@ extension SessionState {
         case .speaking: "waveform.circle.fill"
         case .processing: "gearshape.circle.fill"
         case .responding: "bubble.left.and.text.bubble.right.fill"
+        case .playing: "speaker.wave.2.circle.fill"
         case .failed: "exclamationmark.triangle.fill"
         }
     }
@@ -107,6 +109,7 @@ extension SessionState {
         case .speaking: .red
         case .processing: .orange
         case .responding: .green
+        case .playing: .purple
         case .failed: .yellow
         }
     }
@@ -118,7 +121,8 @@ extension SessionState {
             recorder: PreviewAudioRecorder(),
             detector: SpeechEndpointDetector(scorer: SilentScorer()),
             pipeline: StubSpeechPipeline(),
-            conversation: PreviewConversationManager()
+            conversation: PreviewConversationManager(),
+            synthesizer: PreviewSpeechSynthesizer()
         )
     )
 }

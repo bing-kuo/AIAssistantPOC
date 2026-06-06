@@ -10,6 +10,7 @@ import VoiceCore
 import VoiceIntelligence
 import STTCore
 import LLMCore
+import TTSCore
 
 @main
 struct AIAssistantPOCApp: App {
@@ -18,7 +19,8 @@ struct AIAssistantPOCApp: App {
         recorder: AudioEngineRecorder(),
         detector: AIAssistantPOCApp.makeDetector(),
         pipeline: AIAssistantPOCApp.makePipeline(),
-        conversation: AIAssistantPOCApp.makeConversation()
+        conversation: AIAssistantPOCApp.makeConversation(),
+        synthesizer: AppleSpeechSynthesizer.live()
     )
 
     var body: some Scene {

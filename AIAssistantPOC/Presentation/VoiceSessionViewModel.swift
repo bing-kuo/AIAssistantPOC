@@ -6,6 +6,7 @@
 import Observation
 import VoiceCore
 import VoiceIntelligence
+import TTSCore
 
 enum SessionState: Equatable, Sendable {
     case idle
@@ -13,6 +14,7 @@ enum SessionState: Equatable, Sendable {
     case speaking
     case processing
     case responding
+    case playing
     case failed
 }
 
@@ -24,7 +26,9 @@ final class VoiceSessionViewModel {
     private let detector: any VoiceActivityDetecting
     private let pipeline: any SpeechPipeline
     private let conversation: any ConversationManaging
+    private let synthesizer: any SpeechSynthesizing
     private var sessionTask: Task<Void, Never>?
+    private var isPlaying = false
 
     private(set) var state: SessionState = .idle
     private(set) var lastRMS: Float = 0
@@ -34,7 +38,7 @@ final class VoiceSessionViewModel {
     var isActive: Bool {
         switch state {
         case .idle, .failed: false
-        case .listening, .speaking, .processing, .responding: true
+        case .listening, .speaking, .processing, .responding, .playing: true
         }
     }
 
@@ -42,12 +46,14 @@ final class VoiceSessionViewModel {
         recorder: any AudioRecording,
         detector: any VoiceActivityDetecting,
         pipeline: any SpeechPipeline,
-        conversation: any ConversationManaging
+        conversation: any ConversationManaging,
+        synthesizer: any SpeechSynthesizing
     ) {
         self.recorder = recorder
         self.detector = detector
         self.pipeline = pipeline
         self.conversation = conversation
+        self.synthesizer = synthesizer
     }
 
     func toggle() async {
@@ -87,6 +93,7 @@ final class VoiceSessionViewModel {
         let feeder = Task { [weak self] in
             for await frame in frames {
                 guard let self else { break }
+                guard !self.isPlaying else { continue }
                 self.lastRMS = frame.rms
                 sampleContinuation.yield(frame.samples)
             }
@@ -120,16 +127,29 @@ final class VoiceSessionViewModel {
             for try await delta in conversation.respond(to: text) {
                 answer += delta
             }
+            await speak(answer)
             state = .listening
         } catch {
             if !Task.isCancelled { state = .failed }
         }
     }
 
+    private func speak(_ text: String) async {
+        guard !text.isEmpty else { return }
+        isPlaying = true
+        lastRMS = 0
+        state = .playing
+        try? await synthesizer.speak(text)
+        await detector.reset()
+        isPlaying = false
+    }
+
     private func stop() async {
         sessionTask?.cancel()
         sessionTask = nil
+        await synthesizer.stop()
         await recorder.stop()
+        isPlaying = false
         lastRMS = 0
         state = .idle
     }

@@ -129,6 +129,22 @@
         }
       }
     },
+    "status.playing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speaking reply…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "朗讀回應…"
+          }
+        }
+      }
+    },
     "status.responding" : {
       "localizations" : {
         "en" : {
