@@ -39,16 +39,20 @@ Strictly separate the project into three layers. Dependencies must only flow inw
 The project strictly implements Clean Architecture across local SPM modules to ensure decoupling. Do NOT place Core Domain or Data logic in the Main App target. 
 
 ### 4.1 VoiceAgentKit (Local SPM)
-This package contains the core infrastructure and domain logic, divided into specialized targets:
-- **`VoiceCore` Target:** Handles hardware audio dependencies (`AVFoundation`, `AVAudioEngine`). Encapsulates VAD (Voice Activity Detection), audio capturing, and TTS playback. Must ensure thread-safe hardware access via `actor`.
-- **`STTCore` Target:** Pure stateless networking layer for Speech-to-Text (self-hosted Whisper via HTTP). Strictly no UI or `AVFoundation` imports. Exposes a `SpeechRecognizing` protocol so the backend (Whisper, on-device fallback, or a composed fallback) is swappable.
-- **`LLMCore` Target:** Pure stateless networking layer for the LLM (e.g. OpenAI SSE streams). Kept separate from `STTCore` so STT and LLM have single responsibilities and can each be replaced independently. Strictly no UI or `AVFoundation` imports.
-- **`TTSCore` Target:** Handles `AVSpeechSynthesizer` wrapper for real-time text-to-speech synthesis and playback control.
+This package contains the core infrastructure and domain logic. The Domain layer is isolated in its own target, and each external dependency (audio hardware, VAD, STT, LLM, TTS) lives in a separate target so it can be replaced independently:
+- **`VoiceAgentDomain` Target:** The pure Swift Domain layer. Defines all abstraction boundaries — Entities (`AudioFrame`, `Transcription`, `LLMMessage`, `VADEvent`, etc.) and the protocols every other target implements (`AudioRecording`, `VoiceActivityDetecting`, `SpeechProbabilityScoring`, `SpeechRecognizing`, `LLMResponding`, `SpeechSynthesizing`). Imports `Foundation` ONLY — strictly no `AVFoundation`, `CoreAudio`, networking, or UI. All other targets depend on this; it depends on none of them (DIP).
+- **`AVAudioCapture` Target:** Microphone capture implementing `AudioRecording`. Owns the hardware audio dependencies (`AVFoundation`, `AVAudioEngine`, `Accelerate` for downsampling). Must ensure thread-safe hardware access via `actor`.
+- **`VoiceActivityDetection` Target:** Speech endpointing/segmentation implementing `VoiceActivityDetecting` (`SpeechEndpointDetector`). Pure logic over `[Float]` windows; no `AVFoundation`. Consumes a `SpeechProbabilityScoring` scorer via injection.
+- **`SileroVAD` Target:** A `SpeechProbabilityScoring` implementation backed by the Silero ONNX model (`onnxruntime`). Swappable for any other scorer.
+- **`WhisperSTT` Target:** Pure stateless networking layer for Speech-to-Text (self-hosted Whisper via HTTP) implementing `SpeechRecognizing`. Strictly no UI or `AVFoundation` imports.
+- **`ProxyLLM` Target:** Pure stateless networking layer for the LLM (SSE streams) implementing `LLMResponding`. Kept separate from `WhisperSTT` so STT and LLM have single responsibilities and can each be replaced independently. Strictly no UI or `AVFoundation` imports.
+- **`AppleTTS` Target:** An `AVSpeechSynthesizer` wrapper implementing `SpeechSynthesizing` for real-time text-to-speech synthesis and playback control. `AVFoundation` is isolated to the speaker wrapper file only.
 
 ### 4.2 Main App Target (Presentation Only)
 - Acts solely as the Composition Root and Presentation Layer.
-- Houses SwiftUI Views and `@Observable` ViewModels.
-- ViewModels orchestrate the pipeline by importing the SPM targets (`VoiceCore`, `AICore`) via abstract protocols.
+- Houses SwiftUI Views and `@Observable` ViewModels, plus app-level orchestration (`ConversationManaging`, `SpeechPipeline`).
+- Views and ViewModels depend ONLY on `VoiceAgentDomain` abstractions (and `SwiftUI`/`Observation`); they must NOT import concrete modules (`AVAudioCapture`, `SileroVAD`, etc.).
+- Only the Composition Root (`AIAssistantPOCApp`) imports the concrete targets and injects them into ViewModels via the Domain protocols.
 
 ## 5. TDD (Test-Driven Development) Specification
 When requested to implement new features, strictly follow the **Red-Green-Refactor** cycle:
