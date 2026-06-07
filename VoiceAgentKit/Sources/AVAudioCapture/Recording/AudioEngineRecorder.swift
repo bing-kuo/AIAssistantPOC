@@ -52,6 +52,11 @@ public actor AudioEngineRecorder: AudioRecording {
         }
         
         let input = engine.inputNode
+        do {
+            try input.setVoiceProcessingEnabled(true)
+        } catch {
+            VoiceLog.recorder.error("Failed to enable voice processing: \(error.localizedDescription, privacy: .public)")
+        }
         let format = input.outputFormat(forBus: 0)
         let sampleRate = format.sampleRate
 
@@ -112,14 +117,14 @@ public actor AudioEngineRecorder: AudioRecording {
         do {
             try session.setCategory(
                 .playAndRecord,
-                mode: .measurement,
-                options: [.allowBluetooth, .defaultToSpeaker]
+                mode: .voiceChat,
+                options: [.allowBluetooth, .defaultToSpeaker, .duckOthers]
             )
             try session.setActive(true)
             if session.isInputGainSettable {
                 try? session.setInputGain(1.0)
             }
-            VoiceLog.session.info("AVAudioSession configured: measurement mode, inputGain=\(session.inputGain, privacy: .public), gainSettable=\(session.isInputGainSettable, privacy: .public)")
+            VoiceLog.session.info("AVAudioSession configured: voiceChat mode, inputGain=\(session.inputGain, privacy: .public), gainSettable=\(session.isInputGainSettable, privacy: .public)")
         } catch {
             VoiceLog.session.error("AVAudioSession configuration failed: \(error.localizedDescription, privacy: .public)")
             throw AudioRecorderError.sessionConfigFailed(error.localizedDescription)
