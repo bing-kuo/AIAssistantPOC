@@ -38,9 +38,6 @@ final class AVUtteranceSpeaker: NSObject, UtteranceSpeaking {
         utterance.rate = rate
         utterance.pitchMultiplier = pitch
 
-        let restoreSession = engagePlaybackSession()
-        defer { restoreSession() }
-
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 self.continuation = continuation
@@ -49,36 +46,6 @@ final class AVUtteranceSpeaker: NSObject, UtteranceSpeaking {
         } onCancel: {
             Task { @MainActor in self.synthesizer.stopSpeaking(at: .immediate) }
         }
-    }
-
-    private func engagePlaybackSession() -> @MainActor () -> Void {
-        #if os(macOS)
-        return {}
-        #else
-        let session = AVAudioSession.sharedInstance()
-        let previousCategory = session.category
-        let previousMode = session.mode
-        let previousOptions = session.categoryOptions
-        do {
-            try session.setCategory(
-                .playAndRecord,
-                mode: .spokenAudio,
-                options: [.duckOthers, .defaultToSpeaker, .allowBluetooth]
-            )
-            try session.setActive(true)
-            TTSLog.synthesizer.info("Playback audio session engaged (spokenAudio)")
-        } catch {
-            TTSLog.synthesizer.error("Playback session config failed: \(error.localizedDescription, privacy: .public)")
-        }
-        return {
-            do {
-                try session.setCategory(previousCategory, mode: previousMode, options: previousOptions)
-                try session.setActive(true)
-            } catch {
-                TTSLog.synthesizer.error("Playback session restore failed: \(error.localizedDescription, privacy: .public)")
-            }
-        }
-        #endif
     }
 
     func stop() {
