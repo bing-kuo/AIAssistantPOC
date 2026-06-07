@@ -23,6 +23,16 @@ public struct WhisperSpeechRecognizer: SpeechRecognizing {
     public func transcribe(_ audio: [Float], sampleRate: Int) async throws -> Transcription {
         guard !audio.isEmpty else { throw SpeechRecognitionError.emptyAudio }
 
+        #if DEBUG
+        if AudioProbe.isEnabled {
+            let stats = AudioProbe.analyze(audio, sampleRate: sampleRate)
+            STTLog.recognizer.info("STT input \(stats.description, privacy: .public)")
+            if let url = AudioProbe.dumpWAV(audio, sampleRate: sampleRate, label: "utterance") {
+                STTLog.recognizer.info("STT input WAV written: \(url.lastPathComponent, privacy: .public)")
+            }
+        }
+        #endif
+
         let wav = WAVEncoder.encode(audio, sampleRate: sampleRate)
         let boundary = "Boundary-\(UUID().uuidString)"
 

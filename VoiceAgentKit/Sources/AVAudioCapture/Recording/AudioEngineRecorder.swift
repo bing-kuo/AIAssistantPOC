@@ -15,6 +15,7 @@ public actor AudioEngineRecorder: AudioRecording {
     private var state: AudioRecorderState = .idle
     private let bufferSize: AVAudioFrameCount = 1024
     private let targetSampleRate: Double = 16_000
+    private var captureSink: DiagnosticCaptureSink?
 
     public init() {}
 
@@ -68,9 +69,16 @@ public actor AudioEngineRecorder: AudioRecording {
             throw AudioRecorderError.engineStartFailed("Unsupported input format for resampling")
         }
 
+        let sink = AudioProbe.isEnabled ? DiagnosticCaptureSink(hardwareSampleRate: sampleRate, targetSampleRate: targetSampleRate) : nil
+        self.captureSink = sink
+
         input.installTap(onBus: 0, bufferSize: bufferSize, format: format) { buffer, when in
+            if let sink, let channel = buffer.floatChannelData {
+                sink.appendRaw(Array(UnsafeBufferPointer(start: channel[0], count: Int(buffer.frameLength))))
+            }
             guard let samples = downsampler.downsample(buffer), !samples.isEmpty else { return }
             let rms = AudioMath.rms(samples)
+            sink?.appendDownsampled(samples, rms: rms)
             let timestamp = sampleRate > 0 ? Double(when.sampleTime) / sampleRate : 0
             continuation.yield(AudioFrame(samples: samples, frameCount: samples.count, rms: rms, timestamp: timestamp))
         }
@@ -100,6 +108,8 @@ public actor AudioEngineRecorder: AudioRecording {
         engine.stop()
         continuation?.finish()
         continuation = nil
+        captureSink?.flush()
+        captureSink = nil
         state = .stopped
         
         #if os(iOS) || os(visionOS)

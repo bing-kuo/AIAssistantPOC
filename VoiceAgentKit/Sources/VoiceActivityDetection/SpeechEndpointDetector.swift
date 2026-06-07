@@ -130,6 +130,12 @@ public actor SpeechEndpointDetector: VoiceActivityDetecting {
         sustainedSpeechMs = 0
         utterance.removeAll()
         IntelligenceLog.vad.info("Speech endpoint detected (segmentSamples=\(segment.count, privacy: .public))")
+        #if DEBUG
+        if AudioProbe.isEnabled {
+            let stats = AudioProbe.analyze(segment, sampleRate: configuration.sampleRate)
+            IntelligenceLog.vad.info("VAD segment \(stats.description, privacy: .public)")
+        }
+        #endif
         continuation.yield(.speechEnded(segment: segment))
     }
 
