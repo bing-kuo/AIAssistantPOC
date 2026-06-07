@@ -14,8 +14,9 @@ load_dotenv()
 app = FastAPI()
 
 print("Loading Whisper Model...")
-model = WhisperModel("base", device="cpu", compute_type="int8")
-print("Whisper Model Loaded!")
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "small")
+model = WhisperModel(WHISPER_MODEL, device="cpu", compute_type="int8")
+print(f"Whisper Model Loaded: {WHISPER_MODEL}")
 
 
 @app.post("/api/v1/stt")
@@ -24,7 +25,7 @@ async def speech_to_text(file: UploadFile = File(...)):
     with open(temp_file, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    segments, info = model.transcribe(temp_file, beam_size=5, language="zh")
+    segments, info = model.transcribe(temp_file, beam_size=5, vad_filter=True)
 
     text = "".join([segment.text for segment in segments])
 
