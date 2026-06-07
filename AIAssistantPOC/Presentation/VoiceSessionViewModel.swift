@@ -26,7 +26,7 @@ final class VoiceSessionViewModel {
     private let conversation: any ConversationManaging
     private let synthesizer: any SpeechSynthesizing
     private var sessionTask: Task<Void, Never>?
-    private var isPlaying = false
+    private var isTransitioning = false
 
     private(set) var state: SessionState = .idle
     private(set) var lastRMS: Float = 0
@@ -37,6 +37,13 @@ final class VoiceSessionViewModel {
         switch state {
         case .idle, .failed: false
         case .listening, .speaking, .processing, .responding, .playing: true
+        }
+    }
+
+    private var isCapturing: Bool {
+        switch state {
+        case .listening, .speaking: true
+        case .idle, .processing, .responding, .playing, .failed: false
         }
     }
 
@@ -55,6 +62,9 @@ final class VoiceSessionViewModel {
     }
 
     func toggle() async {
+        guard !isTransitioning else { return }
+        isTransitioning = true
+        defer { isTransitioning = false }
         if isActive {
             await stop()
         } else {
@@ -91,7 +101,10 @@ final class VoiceSessionViewModel {
         let feeder = Task { [weak self] in
             for await frame in frames {
                 guard let self else { break }
-                guard !self.isPlaying else { continue }
+                guard self.isCapturing else {
+                    self.lastRMS = 0
+                    continue
+                }
                 self.lastRMS = frame.rms
                 sampleContinuation.yield(frame.samples)
             }
@@ -108,6 +121,7 @@ final class VoiceSessionViewModel {
         }
 
         feeder.cancel()
+        await feeder.value
         lastRMS = 0
     }
 
@@ -115,6 +129,7 @@ final class VoiceSessionViewModel {
         state = .processing
         do {
             let text = try await pipeline.process(segment)
+            try Task.checkCancellation()
             guard !text.isEmpty else {
                 state = .listening
                 return
@@ -125,7 +140,9 @@ final class VoiceSessionViewModel {
             for try await delta in conversation.respond(to: text) {
                 answer += delta
             }
+            try Task.checkCancellation()
             await speak(answer)
+            try Task.checkCancellation()
             state = .listening
         } catch {
             if !Task.isCancelled { state = .failed }
@@ -134,12 +151,10 @@ final class VoiceSessionViewModel {
 
     private func speak(_ text: String) async {
         guard !text.isEmpty else { return }
-        isPlaying = true
         lastRMS = 0
         state = .playing
         try? await synthesizer.speak(text)
         await detector.reset()
-        isPlaying = false
     }
 
     private func stop() async {
@@ -147,7 +162,6 @@ final class VoiceSessionViewModel {
         sessionTask = nil
         await synthesizer.stop()
         await recorder.stop()
-        isPlaying = false
         lastRMS = 0
         state = .idle
     }
