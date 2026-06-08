@@ -14,8 +14,8 @@ struct SessionDrawerView: View {
     @State private var viewModel: SessionListViewModel
 
     init(
-        reading: any ChatSessionReading,
-        writing: any ChatSessionWriting,
+        fetchSummaries: any FetchSessionSummariesUseCase,
+        deleteSession: any DeleteSessionUseCase,
         isPresented: Bool,
         onClose: @escaping () -> Void,
         onNewSession: @escaping () -> Void,
@@ -25,7 +25,7 @@ struct SessionDrawerView: View {
         self.onClose = onClose
         self.onNewSession = onNewSession
         self.onSelect = onSelect
-        _viewModel = State(initialValue: SessionListViewModel(reading: reading, writing: writing))
+        _viewModel = State(initialValue: SessionListViewModel(fetchSummaries: fetchSummaries, deleteSession: deleteSession))
     }
 
     var body: some View {
@@ -107,8 +107,8 @@ extension View {
 #Preview {
     let store = PreviewChatStore()
     return SessionDrawerView(
-        reading: store,
-        writing: store,
+        fetchSummaries: FetchSessionSummariesInteractor(repository: store),
+        deleteSession: DeleteSessionInteractor(repository: store),
         isPresented: true,
         onClose: {},
         onNewSession: {},

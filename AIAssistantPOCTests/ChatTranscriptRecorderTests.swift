@@ -7,7 +7,7 @@ import Foundation
 import Testing
 @testable import AIAssistantPOC
 
-private actor SpyWriter: ChatSessionWriting {
+private actor SpyWriter: ChatSessionWriteRepository {
     private(set) var created: [(title: String, firstMessage: ChatMessage)] = []
     private(set) var appended: [(message: ChatMessage, sessionID: UUID)] = []
     private(set) var deleted: [UUID] = []

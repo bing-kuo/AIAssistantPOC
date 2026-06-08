@@ -35,6 +35,41 @@ Strictly separate the project into three layers. Dependencies must only flow inw
   - Must only depend on Use Case protocols, never directly on Repositories.
   - State mutations must execute on the `@MainActor`.
 
+### 3.4 App Feature Folder Layout (Mandatory)
+Every App-target feature follows this layout. Before adding a file, decide which layer it belongs to:
+```
+Features/<Feature>/
+├── Domain/
+│   ├── <Noun>.swift              # Entities (pure data structs)
+│   ├── Repositories/             # Repository interfaces (protocols)
+│   └── UseCases/                 # <Verb><Noun>UseCase protocol + <Verb><Noun>Interactor impl
+├── Data/                         # Repository implementations, data sources, SwiftData @Model / DTOs
+├── Presentation/                 # Views, @Observable ViewModels
+└── Preview/                      # Mocks/stubs for SwiftUI Previews
+```
+Entities and interfaces shared across features live in `Shared/Domain/`.
+
+### 3.5 Naming Conventions (Mandatory)
+| Role | Naming | Location |
+| --- | --- | --- |
+| Entity | noun (`ChatMessage`) | Domain |
+| Repository interface (persistence) | `<Noun><Read/Write>Repository` (`ChatSessionReadRepository`, `ConversationRepository`) | Domain/Repositories |
+| Repository implementation | concrete mechanism name (`SwiftDataChatStore`, `InMemoryConversationRepository`) | Data |
+| External-service port / gateway | gerund (`SpeechRecognizing`, `LLMResponding`) | `VoiceAgentDomain` (Kit) |
+| Use Case | protocol `<Verb><Noun>UseCase` + impl `<Verb><Noun>Interactor` | Domain/UseCases |
+| ViewModel | `<Feature>ViewModel` | Presentation |
+
+Repository vs gateway: accessing data the app persists itself (conversations, sessions, history) is a **Repository** (use the suffix); talking to an external system/device (STT/LLM/TTS/microphone) is a **gateway port** (use a gerund; lives in the Kit).
+
+### 3.6 Hard Prohibitions (break layering — reject and fix on sight)
+- A Repository or data-source **implementation** placed in Domain (implementations live only in Data).
+- A ViewModel depending on a Repository or gateway protocol directly — ViewModels may depend **only** on Use Case protocols.
+- A Use Case interactor placed in Data (the interactor is business logic; it belongs in Domain).
+- Domain importing any framework / UI / networking (only `Foundation` and Kit ports are allowed).
+- Adding a protocol that is effectively a Repository without the `Repository` suffix.
+
+**Before adding a file:** pure data → Entity (Domain); a protocol describing "how data is accessed" → Repository interface (Domain); a protocol describing "how one unit of business is performed" → UseCase (Domain); a concrete type touching frameworks/networking/DB → Data; anything a ViewModel calls → must be a UseCase.
+
 ## 4. SPM Modular Architecture (Strictly Enforced)
 The project strictly implements Clean Architecture across local SPM modules to ensure decoupling. Do NOT place Core Domain or Data logic in the Main App target. 
 

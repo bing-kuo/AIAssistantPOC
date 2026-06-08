@@ -9,9 +9,9 @@ import VoiceAgentDomain
 struct ResumeConversationInteractor: ResumeConversationUseCase {
 
     private let conversation: any ConversationRepository
-    private let transcript: any ChatTranscriptRecording
+    private let transcript: any ChatTranscriptRepository
 
-    init(conversation: any ConversationRepository, transcript: any ChatTranscriptRecording) {
+    init(conversation: any ConversationRepository, transcript: any ChatTranscriptRepository) {
         self.conversation = conversation
         self.transcript = transcript
     }

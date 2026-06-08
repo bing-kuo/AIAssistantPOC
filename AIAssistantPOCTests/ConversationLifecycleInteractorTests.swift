@@ -19,7 +19,7 @@ private actor SpyConversationRepository: ConversationRepository {
     func reset() { resetCount += 1 }
 }
 
-private actor SpyTranscript: ChatTranscriptRecording {
+private actor SpyTranscript: ChatTranscriptRepository {
     private(set) var beganNewCount = 0
     private(set) var resumed: [UUID] = []
     func beginNewSession() { beganNewCount += 1 }

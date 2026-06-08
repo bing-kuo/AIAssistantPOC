@@ -43,7 +43,12 @@ struct AIAssistantPOCApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(voiceViewModel: viewModel, reading: store, writing: store)
+            RootView(
+                voiceViewModel: viewModel,
+                fetchSummaries: FetchSessionSummariesInteractor(repository: store),
+                deleteSession: DeleteSessionInteractor(repository: store),
+                loadSession: LoadSessionInteractor(repository: store)
+            )
         }
     }
 
@@ -68,7 +73,7 @@ struct AIAssistantPOCApp: App {
 
     private static func makeProcessTurn(
         conversation: any ConversationRepository,
-        transcript: any ChatTranscriptRecording
+        transcript: any ChatTranscriptRepository
     ) -> any ProcessVoiceTurnUseCase {
         let recognizer = WhisperSpeechRecognizer(configuration: WhisperConfiguration(baseURL: serverBaseURL))
         let responder = ProxyLLMResponder(configuration: LLMConfiguration(baseURL: serverBaseURL))

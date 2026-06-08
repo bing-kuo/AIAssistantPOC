@@ -7,7 +7,7 @@ import Foundation
 import Testing
 @testable import AIAssistantPOC
 
-private actor MockChatStore: ChatSessionReading, ChatSessionWriting {
+private actor MockChatStore: ChatSessionReadRepository, ChatSessionWriteRepository {
     private var stored: [ChatSessionSummary]
     private(set) var deleted: [UUID] = []
 
@@ -32,13 +32,19 @@ private func summary(id: UUID = UUID(), title: String = "T", at seconds: TimeInt
 @Suite("SessionListViewModel")
 struct SessionListViewModelTests {
 
-    @Test("load publishes the summaries returned by the reader")
+    private func makeViewModel(_ store: MockChatStore) -> SessionListViewModel {
+        SessionListViewModel(
+            fetchSummaries: FetchSessionSummariesInteractor(repository: store),
+            deleteSession: DeleteSessionInteractor(repository: store)
+        )
+    }
+
+    @Test("load publishes the summaries returned by the fetch use case")
     func loadPublishesSummaries() async {
         // Given two stored summaries
         let a = summary(title: "A")
         let b = summary(title: "B")
-        let store = MockChatStore(summaries: [a, b])
-        let sut = SessionListViewModel(reading: store, writing: store)
+        let sut = makeViewModel(MockChatStore(summaries: [a, b]))
 
         // When loading
         await sut.load()
@@ -47,19 +53,19 @@ struct SessionListViewModelTests {
         #expect(sut.summaries.map(\.id) == [a.id, b.id])
     }
 
-    @Test("delete removes the session through the writer and reloads")
+    @Test("delete removes the session through the delete use case and reloads")
     func deleteRemovesAndReloads() async {
         // Given a loaded list of two
         let a = summary(title: "A")
         let b = summary(title: "B")
         let store = MockChatStore(summaries: [a, b])
-        let sut = SessionListViewModel(reading: store, writing: store)
+        let sut = makeViewModel(store)
         await sut.load()
 
         // When one is deleted
         await sut.delete(id: a.id)
 
-        // Then the writer was asked and the reloaded list no longer contains it
+        // Then the store was asked and the reloaded list no longer contains it
         #expect(await store.deleted == [a.id])
         #expect(sut.summaries.map(\.id) == [b.id])
     }
@@ -67,8 +73,7 @@ struct SessionListViewModelTests {
     @Test("an empty store yields an empty list")
     func emptyStays() async {
         // Given an empty store
-        let store = MockChatStore(summaries: [])
-        let sut = SessionListViewModel(reading: store, writing: store)
+        let sut = makeViewModel(MockChatStore(summaries: []))
 
         // When loading
         await sut.load()

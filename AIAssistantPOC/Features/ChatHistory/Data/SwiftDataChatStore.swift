@@ -7,7 +7,7 @@ import Foundation
 import SwiftData
 
 @ModelActor
-actor SwiftDataChatStore: ChatSessionReading, ChatSessionWriting {
+actor SwiftDataChatStore: ChatSessionReadRepository, ChatSessionWriteRepository {
 
     private nonisolated static let previewLength = 40
 

@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct PreviewChatStore: ChatSessionReading, ChatSessionWriting {
+struct PreviewChatStore: ChatSessionReadRepository, ChatSessionWriteRepository {
     var sessions: [ChatSession]
 
     init(sessions: [ChatSession] = PreviewChatStore.sample) {

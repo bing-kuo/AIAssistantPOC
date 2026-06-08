@@ -10,22 +10,22 @@ import Observation
 @Observable
 final class SessionListViewModel {
 
-    private let reading: any ChatSessionReading
-    private let writing: any ChatSessionWriting
+    private let fetchSummaries: any FetchSessionSummariesUseCase
+    private let deleteSession: any DeleteSessionUseCase
 
     private(set) var summaries: [ChatSessionSummary] = []
 
-    init(reading: any ChatSessionReading, writing: any ChatSessionWriting) {
-        self.reading = reading
-        self.writing = writing
+    init(fetchSummaries: any FetchSessionSummariesUseCase, deleteSession: any DeleteSessionUseCase) {
+        self.fetchSummaries = fetchSummaries
+        self.deleteSession = deleteSession
     }
 
     func load() async {
-        summaries = (try? await reading.summaries()) ?? []
+        summaries = await fetchSummaries()
     }
 
     func delete(id: UUID) async {
-        try? await writing.deleteSession(id: id)
+        await deleteSession(id)
         await load()
     }
 }

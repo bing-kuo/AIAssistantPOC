@@ -8,19 +8,22 @@ import SwiftUI
 struct RootView: View {
     @State private var voiceViewModel: VoiceSessionViewModel
     @State private var showDrawer = false
-    private let reading: any ChatSessionReading
-    private let writing: any ChatSessionWriting
+    private let fetchSummaries: any FetchSessionSummariesUseCase
+    private let deleteSession: any DeleteSessionUseCase
+    private let loadSession: any LoadSessionUseCase
 
     private let transition = Animation.spring(response: 0.35, dampingFraction: 0.86)
 
     init(
         voiceViewModel: VoiceSessionViewModel,
-        reading: any ChatSessionReading,
-        writing: any ChatSessionWriting
+        fetchSummaries: any FetchSessionSummariesUseCase,
+        deleteSession: any DeleteSessionUseCase,
+        loadSession: any LoadSessionUseCase
     ) {
         _voiceViewModel = State(initialValue: voiceViewModel)
-        self.reading = reading
-        self.writing = writing
+        self.fetchSummaries = fetchSummaries
+        self.deleteSession = deleteSession
+        self.loadSession = loadSession
     }
 
     var body: some View {
@@ -42,8 +45,8 @@ struct RootView: View {
                 }
 
                 SessionDrawerView(
-                    reading: reading,
-                    writing: writing,
+                    fetchSummaries: fetchSummaries,
+                    deleteSession: deleteSession,
                     isPresented: showDrawer,
                     onClose: { close() },
                     onNewSession: { Task { await startNewSession() } },
@@ -74,7 +77,7 @@ struct RootView: View {
 
     private func selectSession(_ id: UUID) async {
         close()
-        guard let session = try? await reading.session(id: id) else { return }
+        guard let session = await loadSession(id) else { return }
         await voiceViewModel.resume(session)
     }
 }

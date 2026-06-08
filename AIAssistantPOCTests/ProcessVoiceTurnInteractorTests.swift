@@ -31,7 +31,7 @@ private actor SpySynthesizer: SpeechSynthesizing {
     func stop() async { stopCount += 1 }
 }
 
-private actor SpyTranscript: ChatTranscriptRecording {
+private actor SpyTranscript: ChatTranscriptRepository {
     private(set) var userMessages: [String] = []
     private(set) var assistantMessages: [String] = []
     func beginNewSession() {}

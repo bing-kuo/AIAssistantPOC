@@ -6,14 +6,14 @@
 import Foundation
 import os
 
-actor ChatTranscriptRecorder: ChatTranscriptRecording {
+actor ChatTranscriptRecorder: ChatTranscriptRepository {
 
-    private let writer: any ChatSessionWriting
+    private let writer: any ChatSessionWriteRepository
     private let titleLength: Int
     private let logger = Logger(subsystem: "AIAssistantPOC", category: "ChatTranscript")
     private var currentSessionID: UUID?
 
-    init(writer: any ChatSessionWriting, titleLength: Int = 20) {
+    init(writer: any ChatSessionWriteRepository, titleLength: Int = 20) {
         self.writer = writer
         self.titleLength = titleLength
     }

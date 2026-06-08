@@ -11,13 +11,13 @@ struct ProcessVoiceTurnInteractor: ProcessVoiceTurnUseCase {
     private let transcribe: any TranscribeUtteranceUseCase
     private let generateReply: any GenerateReplyUseCase
     private let synthesizer: any SpeechSynthesizing
-    private let transcript: any ChatTranscriptRecording
+    private let transcript: any ChatTranscriptRepository
 
     init(
         transcribe: any TranscribeUtteranceUseCase,
         generateReply: any GenerateReplyUseCase,
         synthesizer: any SpeechSynthesizing,
-        transcript: any ChatTranscriptRecording
+        transcript: any ChatTranscriptRepository
     ) {
         self.transcribe = transcribe
         self.generateReply = generateReply

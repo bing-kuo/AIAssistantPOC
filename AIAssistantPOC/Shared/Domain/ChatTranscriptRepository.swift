@@ -1,11 +1,11 @@
 //
-//  ChatTranscriptRecording.swift
+//  ChatTranscriptRepository.swift
 //  AIAssistantPOC
 //
 
 import Foundation
 
-protocol ChatTranscriptRecording: Sendable {
+protocol ChatTranscriptRepository: Sendable {
     func beginNewSession() async
     func resume(sessionID: UUID) async
     func recordUserMessage(_ text: String) async
