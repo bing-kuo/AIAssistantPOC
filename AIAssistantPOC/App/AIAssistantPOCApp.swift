@@ -25,14 +25,18 @@ struct AIAssistantPOCApp: App {
     init() {
         let store = AIAssistantPOCApp.makeStore()
         self.store = store
+
+        let conversation = InMemoryConversationRepository()
+        let transcript = ChatTranscriptRecorder(writer: store)
+        let processTurn = AIAssistantPOCApp.makeProcessTurn(conversation: conversation, transcript: transcript)
+
         _viewModel = State(
             initialValue: VoiceSessionViewModel(
                 recorder: AudioEngineRecorder(),
                 detector: AIAssistantPOCApp.makeDetector(),
-                pipeline: AIAssistantPOCApp.makePipeline(),
-                conversation: AIAssistantPOCApp.makeConversation(),
-                synthesizer: AppleSpeechSynthesizer.live(),
-                transcript: ChatTranscriptRecorder(writer: store)
+                processTurn: processTurn,
+                startNew: StartNewConversationInteractor(conversation: conversation, transcript: transcript),
+                resume: ResumeConversationInteractor(conversation: conversation, transcript: transcript)
             )
         )
     }
@@ -62,14 +66,22 @@ struct AIAssistantPOCApp: App {
         }
     }
 
-    private static func makePipeline() -> any SpeechPipeline {
+    private static func makeProcessTurn(
+        conversation: any ConversationRepository,
+        transcript: any ChatTranscriptRecording
+    ) -> any ProcessVoiceTurnUseCase {
         let recognizer = WhisperSpeechRecognizer(configuration: WhisperConfiguration(baseURL: serverBaseURL))
-        return SttSpeechPipeline(recognizer: recognizer)
-    }
-
-    private static func makeConversation() -> any ConversationManaging {
         let responder = ProxyLLMResponder(configuration: LLMConfiguration(baseURL: serverBaseURL))
-        return ConversationManager(responder: responder, systemPrompt: systemPrompt)
+        return ProcessVoiceTurnInteractor(
+            transcribe: TranscribeUtteranceInteractor(recognizer: recognizer),
+            generateReply: GenerateReplyInteractor(
+                responder: responder,
+                conversation: conversation,
+                systemPrompt: systemPrompt
+            ),
+            synthesizer: AppleSpeechSynthesizer.live(),
+            transcript: transcript
+        )
     }
 
     // hardcode URL for demo. Use `ipconfig getifaddr en1` to check IP.

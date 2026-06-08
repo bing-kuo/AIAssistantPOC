@@ -13,10 +13,9 @@ final class VoiceSessionViewModel {
 
     private let recorder: any AudioRecording
     private let detector: any VoiceActivityDetecting
-    private let pipeline: any SpeechPipeline
-    private let conversation: any ConversationManaging
-    private let synthesizer: any SpeechSynthesizing
-    private let transcript: any ChatTranscriptRecording
+    private let processTurn: any ProcessVoiceTurnUseCase
+    private let startNew: any StartNewConversationUseCase
+    private let resumeConversation: any ResumeConversationUseCase
     private var sessionTask: Task<Void, Never>?
     private var isTransitioning = false
 
@@ -41,31 +40,24 @@ final class VoiceSessionViewModel {
     init(
         recorder: any AudioRecording,
         detector: any VoiceActivityDetecting,
-        pipeline: any SpeechPipeline,
-        conversation: any ConversationManaging,
-        synthesizer: any SpeechSynthesizing,
-        transcript: any ChatTranscriptRecording
+        processTurn: any ProcessVoiceTurnUseCase,
+        startNew: any StartNewConversationUseCase,
+        resume: any ResumeConversationUseCase
     ) {
         self.recorder = recorder
         self.detector = detector
-        self.pipeline = pipeline
-        self.conversation = conversation
-        self.synthesizer = synthesizer
-        self.transcript = transcript
+        self.processTurn = processTurn
+        self.startNew = startNew
+        self.resumeConversation = resume
     }
 
     func beginNewSession() async {
-        await conversation.reset()
-        await transcript.beginNewSession()
+        await startNew()
         messages = []
     }
 
     func resume(_ session: ChatSession) async {
-        let history = session.messages.map {
-            LLMMessage(role: $0.role.llmRole, content: $0.text)
-        }
-        await conversation.restore(history)
-        await transcript.resume(sessionID: session.id)
+        await resumeConversation(session)
         messages = session.messages
     }
 
@@ -133,68 +125,52 @@ final class VoiceSessionViewModel {
     private func process(_ segment: [Float]) async {
         state = .processing
         do {
-            let text = try await pipeline.process(segment)
-            try Task.checkCancellation()
-            guard !text.isEmpty else {
-                state = .listening
-                return
+            for try await event in processTurn(segment) {
+                try Task.checkCancellation()
+                apply(event)
             }
-            messages.append(ChatMessage(role: .user, text: text))
-            await transcript.recordUserMessage(text)
-            state = .responding
-            let answer = try await stream(to: text)
             try Task.checkCancellation()
-            if !answer.isEmpty {
-                await transcript.recordAssistantMessage(answer)
-            }
-            await speak(answer)
-            try Task.checkCancellation()
+            await detector.reset()
             state = .listening
         } catch {
             if !Task.isCancelled { state = .failed }
         }
     }
 
-    private func stream(to userText: String) async throws -> String {
-        var answer = ""
-        var appended = false
-        for try await delta in conversation.respond(to: userText) {
-            answer += delta
-            if appended {
-                let index = messages.count - 1
-                let previous = messages[index]
-                messages[index] = ChatMessage(id: previous.id, role: .assistant, text: answer, createdAt: previous.createdAt)
-            } else {
-                appended = true
-                messages.append(ChatMessage(role: .assistant, text: answer))
-            }
+    private func apply(_ event: VoiceTurnEvent) {
+        switch event {
+        case .userTranscribed(let text):
+            messages.append(ChatMessage(role: .user, text: text))
+            state = .responding
+        case .replyDelta(let delta):
+            appendAssistantDelta(delta)
+        case .replyCompleted:
+            break
+        case .speaking:
+            lastRMS = 0
+            state = .playing
         }
-        return answer
     }
 
-    private func speak(_ text: String) async {
-        guard !text.isEmpty else { return }
-        lastRMS = 0
-        state = .playing
-        try? await synthesizer.speak(text)
-        await detector.reset()
+    private func appendAssistantDelta(_ delta: String) {
+        if let index = messages.indices.last, messages[index].role == .assistant {
+            let previous = messages[index]
+            messages[index] = ChatMessage(
+                id: previous.id,
+                role: .assistant,
+                text: previous.text + delta,
+                createdAt: previous.createdAt
+            )
+        } else {
+            messages.append(ChatMessage(role: .assistant, text: delta))
+        }
     }
 
     private func stop() async {
         sessionTask?.cancel()
         sessionTask = nil
-        await synthesizer.stop()
         await recorder.stop()
         lastRMS = 0
         state = .idle
-    }
-}
-
-private extension ChatRole {
-    var llmRole: LLMRole {
-        switch self {
-        case .user: .user
-        case .assistant: .assistant
-        }
     }
 }

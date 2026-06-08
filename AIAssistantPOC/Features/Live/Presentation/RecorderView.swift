@@ -114,10 +114,9 @@ struct RecorderView: View {
         viewModel: VoiceSessionViewModel(
             recorder: PreviewAudioRecorder(),
             detector: PreviewVoiceActivityDetector(),
-            pipeline: StubSpeechPipeline(),
-            conversation: PreviewConversationManager(),
-            synthesizer: PreviewSpeechSynthesizer(),
-            transcript: PreviewChatTranscriptRecorder()
+            processTurn: PreviewProcessVoiceTurn(),
+            startNew: PreviewStartNewConversation(),
+            resume: PreviewResumeConversation()
         )
     )
 }

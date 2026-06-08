@@ -8,6 +8,8 @@ import Testing
 import VoiceAgentDomain
 @testable import AIAssistantPOC
 
+// MARK: - Capture ports (recorder / detector) mocks
+
 private actor MockRecording: AudioRecording {
     private let permission: Bool
     private let frames: [AudioFrame]
@@ -71,62 +73,6 @@ private actor CountingRecorder: AudioRecording {
     func start() async throws -> AsyncStream<AudioFrame> {
         startCount += 1
         return AsyncStream { $0.finish() }
-    }
-
-    func stop() async { stopCount += 1 }
-}
-
-private struct ImmediatePipeline: SpeechPipeline {
-    let output: String
-    func process(_ audio: [Float]) async throws -> String { output }
-}
-
-private struct ScriptedConversation: ConversationManaging {
-    let deltas: [String]
-    func respond(to userText: String) -> AsyncThrowingStream<String, Error> {
-        let deltas = deltas
-        return AsyncThrowingStream { continuation in
-            for delta in deltas { continuation.yield(delta) }
-            continuation.finish()
-        }
-    }
-    func restore(_ messages: [LLMMessage]) async {}
-    func reset() async {}
-}
-
-private actor SpyTranscript: ChatTranscriptRecording {
-    private(set) var userMessages: [String] = []
-    private(set) var assistantMessages: [String] = []
-    private(set) var beganNewCount = 0
-    private(set) var resumed: [UUID] = []
-
-    func beginNewSession() { beganNewCount += 1 }
-    func resume(sessionID: UUID) { resumed.append(sessionID) }
-    func recordUserMessage(_ text: String) { userMessages.append(text) }
-    func recordAssistantMessage(_ text: String) { assistantMessages.append(text) }
-}
-
-private actor GatedSynthesizer: SpeechSynthesizing {
-    private(set) var spokenText: String?
-    private(set) var stopCount = 0
-    private var continuation: CheckedContinuation<Void, Never>?
-    private var released = false
-    private let gated: Bool
-
-    init(gated: Bool = false) { self.gated = gated }
-
-    var isParked: Bool { continuation != nil }
-
-    func speak(_ text: String) async throws {
-        spokenText = text
-        guard gated, !released else { return }
-        await withCheckedContinuation { self.continuation = $0 }
-    }
-
-    func release() {
-        released = true
-        continuation?.resume()
-        continuation = nil
     }
 
     func stop() async { stopCount += 1 }
@@ -215,25 +161,87 @@ private actor OpenRecorder: AudioRecording {
     }
 }
 
-private actor GatedPipeline: SpeechPipeline {
-    private(set) var processCount = 0
-    private var gate: CheckedContinuation<Void, Never>?
+// MARK: - Use case mocks
+
+private actor Counter {
+    private(set) var value = 0
+    func increment() { value += 1 }
+}
+
+private actor Gate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private(set) var isParked = false
     private var released = false
 
-    func process(_ audio: [Float]) async throws -> String {
-        processCount += 1
-        if processCount == 1, !released {
-            await withCheckedContinuation { gate = $0 }
-        }
-        return ""
+    func wait() async {
+        if released { return }
+        isParked = true
+        await withCheckedContinuation { continuation = $0 }
+        isParked = false
     }
 
     func release() {
         released = true
-        gate?.resume()
-        gate = nil
+        continuation?.resume()
+        continuation = nil
     }
 }
+
+/// Emits scripted events then finishes immediately.
+private struct ScriptedProcessTurn: ProcessVoiceTurnUseCase {
+    let events: [VoiceTurnEvent]
+    init(_ events: [VoiceTurnEvent] = []) { self.events = events }
+
+    func callAsFunction(_ audio: [Float]) -> AsyncThrowingStream<VoiceTurnEvent, Error> {
+        let events = events
+        return AsyncThrowingStream { continuation in
+            for event in events { continuation.yield(event) }
+            continuation.finish()
+        }
+    }
+}
+
+/// Emits scripted events, then parks on a gate until released.
+private struct GatedProcessTurn: ProcessVoiceTurnUseCase {
+    let events: [VoiceTurnEvent]
+    let gate: Gate
+    let invocations: Counter
+
+    func callAsFunction(_ audio: [Float]) -> AsyncThrowingStream<VoiceTurnEvent, Error> {
+        let events = events
+        let gate = gate
+        let invocations = invocations
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                await invocations.increment()
+                for event in events { continuation.yield(event) }
+                await gate.wait()
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}
+
+private actor SpyStartNew: StartNewConversationUseCase {
+    private(set) var count = 0
+    func callAsFunction() async { count += 1 }
+}
+
+private actor SpyResume: ResumeConversationUseCase {
+    private(set) var sessions: [UUID] = []
+    func callAsFunction(_ session: ChatSession) async { sessions.append(session.id) }
+}
+
+private let fullTurnEvents: [VoiceTurnEvent] = [
+    .userTranscribed("HELLO"),
+    .replyDelta("Hi"),
+    .replyDelta(" there"),
+    .replyCompleted("Hi there"),
+    .speaking,
+]
+
+// MARK: - Helpers
 
 @MainActor
 private func wait(
@@ -251,42 +259,45 @@ private func frame() -> AudioFrame {
 }
 
 @MainActor
+private func makeViewModel(
+    recorder: any AudioRecording,
+    detector: any VoiceActivityDetecting,
+    processTurn: any ProcessVoiceTurnUseCase = ScriptedProcessTurn(),
+    startNew: any StartNewConversationUseCase = SpyStartNew(),
+    resume: any ResumeConversationUseCase = SpyResume()
+) -> VoiceSessionViewModel {
+    VoiceSessionViewModel(
+        recorder: recorder,
+        detector: detector,
+        processTurn: processTurn,
+        startNew: startNew,
+        resume: resume
+    )
+}
+
+@MainActor
 @Suite("VoiceSessionViewModel")
 struct VoiceSessionViewModelTests {
 
-    @Test("auto-switches through speaking → processing → responding → playing → listening")
+    @Test("auto-switches through speaking → responding → playing → listening")
     func autoSwitchesThroughStates() async {
-        // Given a detector scripting a full utterance, a streamed reply, and a gated synthesizer
+        // Given a detector scripting a full utterance and a process use case parked at .speaking
         let recorder = MockRecording(frames: [frame(), frame()])
         let detector = MockDetector(scriptedEvents: [.speechStarted, .speechEnded(segment: [0.2, 0.2])])
-        let pipeline = ImmediatePipeline(output: "HELLO")
-        let conversation = ScriptedConversation(deltas: ["Hi", " there"])
-        let synthesizer = GatedSynthesizer(gated: true)
-        let sut = VoiceSessionViewModel(
-            recorder: recorder,
-            detector: detector,
-            pipeline: pipeline,
-            conversation: conversation,
-            synthesizer: synthesizer,
-            transcript: SpyTranscript()
-        )
+        let gate = Gate()
+        let processTurn = GatedProcessTurn(events: fullTurnEvents, gate: gate, invocations: Counter())
+        let sut = makeViewModel(recorder: recorder, detector: detector, processTurn: processTurn)
 
-        // When the user starts the session
+        // When the user starts the session, it streams the reply and parks while playing
         await sut.toggle()
-
-        // Then the reply is synthesized while the state is .playing
-        for _ in 0..<200 {
-            if await synthesizer.spokenText == "Hi there" { break }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        await wait(for: sut) { $0.state == .playing }
         #expect(sut.messages.map(\.role) == [.user, .assistant])
         #expect(sut.messages.first?.text == "HELLO")
         #expect(sut.messages.last?.text == "Hi there")
-        #expect(await synthesizer.spokenText == "Hi there")
         #expect(sut.state == .playing)
 
         // And after playback finishes it returns to listening
-        await synthesizer.release()
+        await gate.release()
         await wait(for: sut) { $0.state == .listening }
         #expect(sut.state == .listening)
     }
@@ -294,15 +305,9 @@ struct VoiceSessionViewModelTests {
     @Test("denied microphone permission moves to failed")
     func deniedPermissionFails() async {
         // Given
-        let recorder = MockRecording(permission: false)
-        let detector = MockDetector(scriptedEvents: [])
-        let sut = VoiceSessionViewModel(
-            recorder: recorder,
-            detector: detector,
-            pipeline: ImmediatePipeline(output: ""),
-            conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer(),
-            transcript: SpyTranscript()
+        let sut = makeViewModel(
+            recorder: MockRecording(permission: false),
+            detector: MockDetector(scriptedEvents: [])
         )
 
         // When
@@ -316,15 +321,7 @@ struct VoiceSessionViewModelTests {
     func toggleStops() async {
         // Given a detector that emits nothing so the session stays listening
         let recorder = MockRecording(frames: [frame()])
-        let detector = MockDetector(scriptedEvents: [])
-        let sut = VoiceSessionViewModel(
-            recorder: recorder,
-            detector: detector,
-            pipeline: ImmediatePipeline(output: ""),
-            conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer(),
-            transcript: SpyTranscript()
-        )
+        let sut = makeViewModel(recorder: recorder, detector: MockDetector(scriptedEvents: []))
 
         // When started then toggled again
         await sut.toggle()
@@ -340,14 +337,7 @@ struct VoiceSessionViewModelTests {
         // Given a recorder whose permission request parks until both toggles arrive,
         // so `state` is still .idle (isActive == false) when the second toggle reads it
         let recorder = CountingRecorder()
-        let sut = VoiceSessionViewModel(
-            recorder: recorder,
-            detector: MockDetector(scriptedEvents: []),
-            pipeline: ImmediatePipeline(output: ""),
-            conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer(),
-            transcript: SpyTranscript()
-        )
+        let sut = makeViewModel(recorder: recorder, detector: MockDetector(scriptedEvents: []))
 
         // When the user frantically taps twice before the first start resolves
         async let first: Void = sut.toggle()
@@ -366,36 +356,26 @@ struct VoiceSessionViewModelTests {
 
     @Test("stopping mid-playback must stay idle, not be overwritten back to listening")
     func stopDuringPlaybackStaysIdle() async {
-        // Given a session parked inside a gated synthesizer (state == .playing)
+        // Given a session parked inside the process use case at .speaking (state == .playing)
         let recorder = MockRecording(frames: [frame()])
         let detector = MockDetector(scriptedEvents: [.speechStarted, .speechEnded(segment: [0.2, 0.2])])
-        let synthesizer = GatedSynthesizer(gated: true)
-        let sut = VoiceSessionViewModel(
-            recorder: recorder,
-            detector: detector,
-            pipeline: ImmediatePipeline(output: "HELLO"),
-            conversation: ScriptedConversation(deltas: ["Hi"]),
-            synthesizer: synthesizer,
-            transcript: SpyTranscript()
-        )
+        let gate = Gate()
+        let processTurn = GatedProcessTurn(events: fullTurnEvents, gate: gate, invocations: Counter())
+        let sut = makeViewModel(recorder: recorder, detector: detector, processTurn: processTurn)
 
         await sut.toggle()
         await wait(for: sut) { $0.state == .playing }
-        for _ in 0..<100 {
-            if await synthesizer.isParked { break }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
         #expect(sut.state == .playing)
-        #expect(await synthesizer.isParked)
+        #expect(await gate.isParked)
 
         // When the user stops while playback is still in flight
         await sut.toggle()
         #expect(sut.state == .idle)
 
-        // And the still-parked process() is allowed to resume after the stop
-        await synthesizer.release()
+        // And the still-parked turn is allowed to resume after the stop
+        await gate.release()
 
-        // Then process() must not resurrect the session by writing .listening over .idle
+        // Then the cancelled turn must not resurrect the session by writing .listening over .idle
         var observed: SessionState = sut.state
         for _ in 0..<50 {
             try? await Task.sleep(for: .milliseconds(10))
@@ -406,25 +386,20 @@ struct VoiceSessionViewModelTests {
 
     @Test("audio is not fed to the VAD while a turn is being processed (no buffered replay)")
     func noVADReplayWhileProcessing() async {
-        // Given a session parked in its first turn (gated pipeline holds .processing)
+        // Given a session parked in its first turn (process use case holds .processing)
         let probe = ReplayProbe()
         let recorder = HeldFrameRecorder(extraFrames: 20)
-        let pipeline = GatedPipeline()
-        let sut = VoiceSessionViewModel(
-            recorder: recorder,
-            detector: ProbingDetector(probe: probe),
-            pipeline: pipeline,
-            conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer(),
-            transcript: SpyTranscript()
-        )
+        let gate = Gate()
+        let invocations = Counter()
+        let processTurn = GatedProcessTurn(events: [], gate: gate, invocations: invocations)
+        let sut = makeViewModel(recorder: recorder, detector: ProbingDetector(probe: probe), processTurn: processTurn)
 
         await sut.toggle()
         for _ in 0..<200 {
-            if await pipeline.processCount == 1 { break }
+            if await invocations.value == 1 { break }
             try? await Task.sleep(for: .milliseconds(10))
         }
-        #expect(await pipeline.processCount == 1)
+        #expect(await invocations.value == 1)
 
         // When the user keeps speaking (a burst of audio) while the turn is still processing
         await recorder.releaseFrames()
@@ -437,7 +412,7 @@ struct VoiceSessionViewModelTests {
         #expect(await probe.samplesFinished)
         #expect(await probe.batchCount == 1)
 
-        await pipeline.release()
+        await gate.release()
     }
 
     @Test("stopping the session terminates the audio feeder (no orphaned VAD stream)")
@@ -445,14 +420,7 @@ struct VoiceSessionViewModelTests {
         // Given an active session whose microphone stream stays open until stopped
         let probe = ReplayProbe()
         let recorder = OpenRecorder()
-        let sut = VoiceSessionViewModel(
-            recorder: recorder,
-            detector: ProbingDetector(probe: probe),
-            pipeline: ImmediatePipeline(output: ""),
-            conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer(),
-            transcript: SpyTranscript()
-        )
+        let sut = makeViewModel(recorder: recorder, detector: ProbingDetector(probe: probe), processTurn: ScriptedProcessTurn())
 
         await sut.toggle()
         await wait(for: sut) { $0.state == .listening }
@@ -469,44 +437,30 @@ struct VoiceSessionViewModelTests {
         #expect(await probe.samplesFinished)
     }
 
-    @Test("a completed turn records the user message then the assistant reply")
-    func recordsTurnToTranscript() async {
-        // Given a session that transcribes a turn and streams a reply
+    @Test("a completed turn appends the user message then the streamed assistant reply")
+    func buildsTurnMessages() async {
+        // Given a session that streams a full turn
         let recorder = MockRecording(frames: [frame()])
         let detector = MockDetector(scriptedEvents: [.speechStarted, .speechEnded(segment: [0.2, 0.2])])
-        let transcript = SpyTranscript()
-        let sut = VoiceSessionViewModel(
-            recorder: recorder,
-            detector: detector,
-            pipeline: ImmediatePipeline(output: "HELLO"),
-            conversation: ScriptedConversation(deltas: ["Hi", " there"]),
-            synthesizer: GatedSynthesizer(),
-            transcript: transcript
-        )
+        let sut = makeViewModel(recorder: recorder, detector: detector, processTurn: ScriptedProcessTurn(fullTurnEvents))
 
         // When the turn runs to completion
         await sut.toggle()
-        for _ in 0..<200 {
-            if await transcript.assistantMessages.isEmpty == false { break }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
+        await wait(for: sut) { $0.messages.count == 2 }
 
-        // Then both sides of the turn are recorded with the right text
-        #expect(await transcript.userMessages == ["HELLO"])
-        #expect(await transcript.assistantMessages == ["Hi there"])
+        // Then both sides of the turn are reflected in the live view
+        #expect(sut.messages.map(\.role) == [.user, .assistant])
+        #expect(sut.messages.map(\.text) == ["HELLO", "Hi there"])
     }
 
-    @Test("resume loads the full session transcript into the live view")
+    @Test("resume loads the session transcript and delegates restore to the use case")
     func resumeLoadsTranscript() async {
         // Given a recorded session with one full turn
-        let transcript = SpyTranscript()
-        let sut = VoiceSessionViewModel(
+        let resume = SpyResume()
+        let sut = makeViewModel(
             recorder: MockRecording(),
             detector: MockDetector(scriptedEvents: []),
-            pipeline: ImmediatePipeline(output: ""),
-            conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer(),
-            transcript: transcript
+            resume: resume
         )
         let id = UUID()
         let session = ChatSession(
@@ -523,22 +477,19 @@ struct VoiceSessionViewModelTests {
         // When the session is resumed
         await sut.resume(session)
 
-        // Then the full transcript is shown and the recorder is pointed at the session
+        // Then the full transcript is shown and the restore use case received the session
         #expect(sut.messages.map(\.text) == ["previous question", "previous answer"])
-        #expect(await transcript.resumed == [id])
+        #expect(await resume.sessions == [id])
     }
 
-    @Test("beginNewSession clears the thumbnail and resets the recorder")
+    @Test("beginNewSession clears the live view and delegates to the use case")
     func beginNewSessionResets() async {
         // Given a view model carrying a resumed turn
-        let transcript = SpyTranscript()
-        let sut = VoiceSessionViewModel(
+        let startNew = SpyStartNew()
+        let sut = makeViewModel(
             recorder: MockRecording(),
             detector: MockDetector(scriptedEvents: []),
-            pipeline: ImmediatePipeline(output: ""),
-            conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer(),
-            transcript: transcript
+            startNew: startNew
         )
         await sut.resume(
             ChatSession(
@@ -553,8 +504,8 @@ struct VoiceSessionViewModelTests {
         // When a new session begins
         await sut.beginNewSession()
 
-        // Then the transcript is cleared and the recorder is reset
+        // Then the live view is cleared and the start-new use case is invoked
         #expect(sut.messages.isEmpty)
-        #expect(await transcript.beganNewCount == 1)
+        #expect(await startNew.count == 1)
     }
 }
