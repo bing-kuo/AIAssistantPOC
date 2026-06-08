@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import VoiceAgentDomain
 import AVAudioCapture
 import VoiceActivityDetection
@@ -17,17 +18,39 @@ import AppleTTS
 @main
 struct AIAssistantPOCApp: App {
 
-    @State private var viewModel = VoiceSessionViewModel(
-        recorder: AudioEngineRecorder(),
-        detector: AIAssistantPOCApp.makeDetector(),
-        pipeline: AIAssistantPOCApp.makePipeline(),
-        conversation: AIAssistantPOCApp.makeConversation(),
-        synthesizer: AppleSpeechSynthesizer.live()
-    )
+    private let store: SwiftDataChatStore
+
+    @State private var viewModel: VoiceSessionViewModel
+
+    init() {
+        let store = AIAssistantPOCApp.makeStore()
+        self.store = store
+        _viewModel = State(
+            initialValue: VoiceSessionViewModel(
+                recorder: AudioEngineRecorder(),
+                detector: AIAssistantPOCApp.makeDetector(),
+                pipeline: AIAssistantPOCApp.makePipeline(),
+                conversation: AIAssistantPOCApp.makeConversation(),
+                synthesizer: AppleSpeechSynthesizer.live(),
+                transcript: ChatTranscriptRecorder(writer: store)
+            )
+        )
+    }
 
     var body: some Scene {
         WindowGroup {
-            RecorderView(viewModel: viewModel)
+            RootView(voiceViewModel: viewModel, reading: store, writing: store)
+        }
+    }
+
+    private static func makeStore() -> SwiftDataChatStore {
+        do {
+            let container = try ModelContainer(for: SessionRecord.self)
+            return SwiftDataChatStore(modelContainer: container)
+        } catch {
+            let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+            let container = try! ModelContainer(for: SessionRecord.self, configurations: configuration)
+            return SwiftDataChatStore(modelContainer: container)
         }
     }
 
