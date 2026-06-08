@@ -3,18 +3,9 @@
 //  AIAssistantPOC
 //
 
+import Foundation
 import Observation
 import VoiceAgentDomain
-
-enum SessionState: Equatable, Sendable {
-    case idle
-    case listening
-    case speaking
-    case processing
-    case responding
-    case playing
-    case failed
-}
 
 @MainActor
 @Observable
@@ -25,13 +16,13 @@ final class VoiceSessionViewModel {
     private let pipeline: any SpeechPipeline
     private let conversation: any ConversationManaging
     private let synthesizer: any SpeechSynthesizing
+    private let transcript: any ChatTranscriptRecording
     private var sessionTask: Task<Void, Never>?
     private var isTransitioning = false
 
     private(set) var state: SessionState = .idle
     private(set) var lastRMS: Float = 0
-    private(set) var lastUserText: String?
-    private(set) var answer: String = ""
+    private(set) var messages: [ChatMessage] = []
 
     var isActive: Bool {
         switch state {
@@ -52,13 +43,30 @@ final class VoiceSessionViewModel {
         detector: any VoiceActivityDetecting,
         pipeline: any SpeechPipeline,
         conversation: any ConversationManaging,
-        synthesizer: any SpeechSynthesizing
+        synthesizer: any SpeechSynthesizing,
+        transcript: any ChatTranscriptRecording
     ) {
         self.recorder = recorder
         self.detector = detector
         self.pipeline = pipeline
         self.conversation = conversation
         self.synthesizer = synthesizer
+        self.transcript = transcript
+    }
+
+    func beginNewSession() async {
+        await conversation.reset()
+        await transcript.beginNewSession()
+        messages = []
+    }
+
+    func resume(_ session: ChatSession) async {
+        let history = session.messages.map {
+            LLMMessage(role: $0.role.llmRole, content: $0.text)
+        }
+        await conversation.restore(history)
+        await transcript.resume(sessionID: session.id)
+        messages = session.messages
     }
 
     func toggle() async {
@@ -79,9 +87,6 @@ final class VoiceSessionViewModel {
         }
 
         await detector.reset()
-        await conversation.reset()
-        lastUserText = nil
-        answer = ""
 
         do {
             let frames = try await recorder.start()
@@ -134,19 +139,37 @@ final class VoiceSessionViewModel {
                 state = .listening
                 return
             }
-            lastUserText = text
-            answer = ""
+            messages.append(ChatMessage(role: .user, text: text))
+            await transcript.recordUserMessage(text)
             state = .responding
-            for try await delta in conversation.respond(to: text) {
-                answer += delta
-            }
+            let answer = try await stream(to: text)
             try Task.checkCancellation()
+            if !answer.isEmpty {
+                await transcript.recordAssistantMessage(answer)
+            }
             await speak(answer)
             try Task.checkCancellation()
             state = .listening
         } catch {
             if !Task.isCancelled { state = .failed }
         }
+    }
+
+    private func stream(to userText: String) async throws -> String {
+        var answer = ""
+        var appended = false
+        for try await delta in conversation.respond(to: userText) {
+            answer += delta
+            if appended {
+                let index = messages.count - 1
+                let previous = messages[index]
+                messages[index] = ChatMessage(id: previous.id, role: .assistant, text: answer, createdAt: previous.createdAt)
+            } else {
+                appended = true
+                messages.append(ChatMessage(role: .assistant, text: answer))
+            }
+        }
+        return answer
     }
 
     private func speak(_ text: String) async {
@@ -164,5 +187,14 @@ final class VoiceSessionViewModel {
         await recorder.stop()
         lastRMS = 0
         state = .idle
+    }
+}
+
+private extension ChatRole {
+    var llmRole: LLMRole {
+        switch self {
+        case .user: .user
+        case .assistant: .assistant
+        }
     }
 }

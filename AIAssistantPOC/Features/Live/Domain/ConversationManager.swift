@@ -41,6 +41,13 @@ actor ConversationManager: ConversationManaging {
         }
     }
 
+    func restore(_ messages: [LLMMessage]) {
+        history = messages
+        if history.count > maxMessages {
+            history.removeFirst(history.count - maxMessages)
+        }
+    }
+
     func reset() {
         history.removeAll()
     }

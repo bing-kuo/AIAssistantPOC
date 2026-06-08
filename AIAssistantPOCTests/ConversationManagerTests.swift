@@ -80,6 +80,49 @@ struct ConversationManagerTests {
         #expect(!messages.contains { $0.content == "U1" })
     }
 
+    @Test("restore seeds prior turns so the next reply carries them as context")
+    func restoreSeedsHistory() async throws {
+        // Given a fresh conversation restored with one prior turn
+        let responder = RecordingResponder(deltas: ["A2"])
+        let sut = ConversationManager(responder: responder, systemPrompt: "SYS")
+        await sut.restore([
+            LLMMessage(role: .user, content: "U1"),
+            LLMMessage(role: .assistant, content: "A1"),
+        ])
+
+        // When a new turn runs
+        _ = try await drain(sut.respond(to: "U2"))
+
+        // Then the restored turn precedes the new user message under the system prompt
+        let messages = responder.lastMessages
+        #expect(messages.map(\.role) == [.system, .user, .assistant, .user])
+        #expect(messages[1].content == "U1")
+        #expect(messages[2].content == "A1")
+        #expect(messages[3].content == "U2")
+    }
+
+    @Test("restore respects the history cap, dropping the oldest restored turns")
+    func restoreRespectsCap() async throws {
+        // Given a cap of one turn restored with two turns
+        let responder = RecordingResponder(deltas: ["A"])
+        let sut = ConversationManager(responder: responder, systemPrompt: "SYS", maxMessages: 2)
+        await sut.restore([
+            LLMMessage(role: .user, content: "OLD-U"),
+            LLMMessage(role: .assistant, content: "OLD-A"),
+            LLMMessage(role: .user, content: "NEW-U"),
+            LLMMessage(role: .assistant, content: "NEW-A"),
+        ])
+
+        // When a new turn runs
+        _ = try await drain(sut.respond(to: "U"))
+
+        // Then only the most recent restored turn survives ahead of the new message
+        let messages = responder.lastMessages
+        #expect(messages.map(\.role) == [.system, .user, .assistant, .user])
+        #expect(messages[1].content == "NEW-U")
+        #expect(!messages.contains { $0.content == "OLD-U" })
+    }
+
     @Test("reset clears the conversation history")
     func resetClears() async throws {
         // Given a conversation with one prior turn

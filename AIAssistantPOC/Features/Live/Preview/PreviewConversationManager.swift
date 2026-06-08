@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import VoiceAgentDomain
 
 struct PreviewConversationManager: ConversationManaging {
     func respond(to userText: String) -> AsyncThrowingStream<String, Error> {
@@ -16,6 +17,8 @@ struct PreviewConversationManager: ConversationManaging {
             }
         }
     }
+
+    func restore(_ messages: [LLMMessage]) async {}
 
     func reset() async {}
 }

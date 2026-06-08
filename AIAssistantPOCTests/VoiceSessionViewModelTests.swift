@@ -3,6 +3,7 @@
 //  AIAssistantPOCTests
 //
 
+import Foundation
 import Testing
 import VoiceAgentDomain
 @testable import AIAssistantPOC
@@ -89,7 +90,20 @@ private struct ScriptedConversation: ConversationManaging {
             continuation.finish()
         }
     }
+    func restore(_ messages: [LLMMessage]) async {}
     func reset() async {}
+}
+
+private actor SpyTranscript: ChatTranscriptRecording {
+    private(set) var userMessages: [String] = []
+    private(set) var assistantMessages: [String] = []
+    private(set) var beganNewCount = 0
+    private(set) var resumed: [UUID] = []
+
+    func beginNewSession() { beganNewCount += 1 }
+    func resume(sessionID: UUID) { resumed.append(sessionID) }
+    func recordUserMessage(_ text: String) { userMessages.append(text) }
+    func recordAssistantMessage(_ text: String) { assistantMessages.append(text) }
 }
 
 private actor GatedSynthesizer: SpeechSynthesizing {
@@ -253,7 +267,8 @@ struct VoiceSessionViewModelTests {
             detector: detector,
             pipeline: pipeline,
             conversation: conversation,
-            synthesizer: synthesizer
+            synthesizer: synthesizer,
+            transcript: SpyTranscript()
         )
 
         // When the user starts the session
@@ -264,7 +279,9 @@ struct VoiceSessionViewModelTests {
             if await synthesizer.spokenText == "Hi there" { break }
             try? await Task.sleep(for: .milliseconds(10))
         }
-        #expect(sut.lastUserText == "HELLO")
+        #expect(sut.messages.map(\.role) == [.user, .assistant])
+        #expect(sut.messages.first?.text == "HELLO")
+        #expect(sut.messages.last?.text == "Hi there")
         #expect(await synthesizer.spokenText == "Hi there")
         #expect(sut.state == .playing)
 
@@ -284,7 +301,8 @@ struct VoiceSessionViewModelTests {
             detector: detector,
             pipeline: ImmediatePipeline(output: ""),
             conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer()
+            synthesizer: GatedSynthesizer(),
+            transcript: SpyTranscript()
         )
 
         // When
@@ -304,7 +322,8 @@ struct VoiceSessionViewModelTests {
             detector: detector,
             pipeline: ImmediatePipeline(output: ""),
             conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer()
+            synthesizer: GatedSynthesizer(),
+            transcript: SpyTranscript()
         )
 
         // When started then toggled again
@@ -326,7 +345,8 @@ struct VoiceSessionViewModelTests {
             detector: MockDetector(scriptedEvents: []),
             pipeline: ImmediatePipeline(output: ""),
             conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer()
+            synthesizer: GatedSynthesizer(),
+            transcript: SpyTranscript()
         )
 
         // When the user frantically taps twice before the first start resolves
@@ -355,7 +375,8 @@ struct VoiceSessionViewModelTests {
             detector: detector,
             pipeline: ImmediatePipeline(output: "HELLO"),
             conversation: ScriptedConversation(deltas: ["Hi"]),
-            synthesizer: synthesizer
+            synthesizer: synthesizer,
+            transcript: SpyTranscript()
         )
 
         await sut.toggle()
@@ -394,7 +415,8 @@ struct VoiceSessionViewModelTests {
             detector: ProbingDetector(probe: probe),
             pipeline: pipeline,
             conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer()
+            synthesizer: GatedSynthesizer(),
+            transcript: SpyTranscript()
         )
 
         await sut.toggle()
@@ -428,7 +450,8 @@ struct VoiceSessionViewModelTests {
             detector: ProbingDetector(probe: probe),
             pipeline: ImmediatePipeline(output: ""),
             conversation: ScriptedConversation(deltas: []),
-            synthesizer: GatedSynthesizer()
+            synthesizer: GatedSynthesizer(),
+            transcript: SpyTranscript()
         )
 
         await sut.toggle()
@@ -444,5 +467,94 @@ struct VoiceSessionViewModelTests {
             try? await Task.sleep(for: .milliseconds(10))
         }
         #expect(await probe.samplesFinished)
+    }
+
+    @Test("a completed turn records the user message then the assistant reply")
+    func recordsTurnToTranscript() async {
+        // Given a session that transcribes a turn and streams a reply
+        let recorder = MockRecording(frames: [frame()])
+        let detector = MockDetector(scriptedEvents: [.speechStarted, .speechEnded(segment: [0.2, 0.2])])
+        let transcript = SpyTranscript()
+        let sut = VoiceSessionViewModel(
+            recorder: recorder,
+            detector: detector,
+            pipeline: ImmediatePipeline(output: "HELLO"),
+            conversation: ScriptedConversation(deltas: ["Hi", " there"]),
+            synthesizer: GatedSynthesizer(),
+            transcript: transcript
+        )
+
+        // When the turn runs to completion
+        await sut.toggle()
+        for _ in 0..<200 {
+            if await transcript.assistantMessages.isEmpty == false { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        // Then both sides of the turn are recorded with the right text
+        #expect(await transcript.userMessages == ["HELLO"])
+        #expect(await transcript.assistantMessages == ["Hi there"])
+    }
+
+    @Test("resume loads the full session transcript into the live view")
+    func resumeLoadsTranscript() async {
+        // Given a recorded session with one full turn
+        let transcript = SpyTranscript()
+        let sut = VoiceSessionViewModel(
+            recorder: MockRecording(),
+            detector: MockDetector(scriptedEvents: []),
+            pipeline: ImmediatePipeline(output: ""),
+            conversation: ScriptedConversation(deltas: []),
+            synthesizer: GatedSynthesizer(),
+            transcript: transcript
+        )
+        let id = UUID()
+        let session = ChatSession(
+            id: id,
+            title: "Earlier",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 10),
+            messages: [
+                ChatMessage(role: .user, text: "previous question", createdAt: Date(timeIntervalSince1970: 0)),
+                ChatMessage(role: .assistant, text: "previous answer", createdAt: Date(timeIntervalSince1970: 5)),
+            ]
+        )
+
+        // When the session is resumed
+        await sut.resume(session)
+
+        // Then the full transcript is shown and the recorder is pointed at the session
+        #expect(sut.messages.map(\.text) == ["previous question", "previous answer"])
+        #expect(await transcript.resumed == [id])
+    }
+
+    @Test("beginNewSession clears the thumbnail and resets the recorder")
+    func beginNewSessionResets() async {
+        // Given a view model carrying a resumed turn
+        let transcript = SpyTranscript()
+        let sut = VoiceSessionViewModel(
+            recorder: MockRecording(),
+            detector: MockDetector(scriptedEvents: []),
+            pipeline: ImmediatePipeline(output: ""),
+            conversation: ScriptedConversation(deltas: []),
+            synthesizer: GatedSynthesizer(),
+            transcript: transcript
+        )
+        await sut.resume(
+            ChatSession(
+                id: UUID(),
+                title: "Earlier",
+                createdAt: Date(timeIntervalSince1970: 0),
+                updatedAt: Date(timeIntervalSince1970: 0),
+                messages: [ChatMessage(role: .user, text: "old", createdAt: Date(timeIntervalSince1970: 0))]
+            )
+        )
+
+        // When a new session begins
+        await sut.beginNewSession()
+
+        // Then the transcript is cleared and the recorder is reset
+        #expect(sut.messages.isEmpty)
+        #expect(await transcript.beganNewCount == 1)
     }
 }
