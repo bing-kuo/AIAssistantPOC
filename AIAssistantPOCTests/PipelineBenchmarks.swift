@@ -15,6 +15,7 @@
 //
 
 import Foundation
+import AVFoundation
 import Testing
 import VoiceAgentDomain
 import WhisperSTT
@@ -29,6 +30,21 @@ private enum Bench {
     static var iterations: Int {
         Int(ProcessInfo.processInfo.environment["VOICE_BENCH_N"] ?? "") ?? 20
     }
+    static var wavPath: String? { ProcessInfo.processInfo.environment["VOICE_BENCH_WAV"] }
+}
+
+/// Decodes a WAV file into mono Float32 samples at its native sample rate.
+private func loadWAV(_ path: String) throws -> (samples: [Float], sampleRate: Int) {
+    let file = try AVAudioFile(forReading: URL(fileURLWithPath: path))
+    let format = file.processingFormat
+    guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(file.length)),
+          file.length > 0 else {
+        return ([], Int(format.sampleRate))
+    }
+    try file.read(into: buffer)
+    let channel = buffer.floatChannelData![0]
+    let samples = Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+    return (samples, Int(format.sampleRate))
 }
 
 private func seconds(_ duration: Duration) -> Double {
@@ -73,9 +89,17 @@ struct PipelineBenchmarks {
     @Test("STT round-trip latency", .enabled(if: Bench.isEnabled))
     func sttRoundTrip() async throws {
         let recognizer = WhisperSpeechRecognizer(configuration: WhisperConfiguration(baseURL: Bench.baseURL))
-        let sampleRate = 16_000
-        let audioSeconds = 3.0
-        let audio = sampleUtterance(seconds: audioSeconds, sampleRate: sampleRate)
+        let audio: [Float]
+        let sampleRate: Int
+        if let path = Bench.wavPath {
+            (audio, sampleRate) = try loadWAV(path)
+            print("[bench] STT input: \(path) (\(audio.count) samples @ \(sampleRate)Hz)")
+        } else {
+            sampleRate = 16_000
+            audio = sampleUtterance(seconds: 3.0, sampleRate: sampleRate)
+            print("[bench] STT input: synthetic tone (set VOICE_BENCH_WAV for representative numbers)")
+        }
+        let audioSeconds = Double(audio.count) / Double(sampleRate)
         let clock = ContinuousClock()
 
         _ = try? await recognizer.transcribe(audio, sampleRate: sampleRate)   // warmup
