@@ -17,7 +17,10 @@ struct TranscribeUtteranceInteractor: TranscribeUtteranceUseCase {
     }
 
     func callAsFunction(_ audio: [Float]) async throws -> String {
-        let transcription = try await recognizer.transcribe(audio, sampleRate: sampleRate)
-        return transcription.text
+        do {
+            return try await recognizer.transcribe(audio, sampleRate: sampleRate).text
+        } catch SpeechRecognitionError.transport {
+            return try await recognizer.transcribe(audio, sampleRate: sampleRate).text
+        }
     }
 }

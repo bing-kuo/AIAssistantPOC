@@ -28,6 +28,23 @@ private final class SpyRecognizer: SpeechRecognizing, @unchecked Sendable {
     var count: Int? { lock.lock(); defer { lock.unlock() }; return capturedCount }
 }
 
+private actor ScriptedRecognizer: SpeechRecognizing {
+    private var errors: [SpeechRecognitionError]
+    private let success: Transcription
+    private(set) var calls = 0
+
+    init(failuresBeforeSuccess errors: [SpeechRecognitionError], success: Transcription) {
+        self.errors = errors
+        self.success = success
+    }
+
+    func transcribe(_ audio: [Float], sampleRate: Int) async throws -> Transcription {
+        calls += 1
+        if !errors.isEmpty { throw errors.removeFirst() }
+        return success
+    }
+}
+
 @Suite("TranscribeUtteranceInteractor")
 struct TranscribeUtteranceInteractorTests {
 
@@ -44,5 +61,36 @@ struct TranscribeUtteranceInteractorTests {
         #expect(text == "HELLO")
         #expect(await recognizer.sampleRate == 16_000)
         #expect(await recognizer.count == 3)
+    }
+
+    @Test("retries once on a transport error then returns the text")
+    func retriesOnTransport() async throws {
+        // Given a recognizer that fails once with a transport error, then succeeds
+        let recognizer = ScriptedRecognizer(
+            failuresBeforeSuccess: [.transport("local network blocked")],
+            success: Transcription(text: "HELLO")
+        )
+        let sut = TranscribeUtteranceInteractor(recognizer: recognizer)
+
+        // When transcribing
+        let text = try await sut([0.1])
+
+        // Then it retried once and returned the text
+        #expect(text == "HELLO")
+        #expect(await recognizer.calls == 2)
+    }
+
+    @Test("does not retry on a non-transport error")
+    func doesNotRetryOnServerError() async {
+        // Given a recognizer that fails with a server error
+        let recognizer = ScriptedRecognizer(
+            failuresBeforeSuccess: [.server(status: 500), .server(status: 500)],
+            success: Transcription(text: "HELLO")
+        )
+        let sut = TranscribeUtteranceInteractor(recognizer: recognizer)
+
+        // When transcribing, the server error propagates without a retry
+        await #expect(throws: SpeechRecognitionError.self) { try await sut([0.1]) }
+        #expect(await recognizer.calls == 1)
     }
 }

@@ -11,6 +11,7 @@ struct RootView: View {
     private let fetchSummaries: any FetchSessionSummariesUseCase
     private let deleteSession: any DeleteSessionUseCase
     private let loadSession: any LoadSessionUseCase
+    private let warmUpServer: any WarmUpServerConnectionUseCase
 
     private let transition = Animation.spring(response: 0.35, dampingFraction: 0.86)
 
@@ -18,12 +19,14 @@ struct RootView: View {
         voiceViewModel: VoiceSessionViewModel,
         fetchSummaries: any FetchSessionSummariesUseCase,
         deleteSession: any DeleteSessionUseCase,
-        loadSession: any LoadSessionUseCase
+        loadSession: any LoadSessionUseCase,
+        warmUpServer: any WarmUpServerConnectionUseCase
     ) {
         _voiceViewModel = State(initialValue: voiceViewModel)
         self.fetchSummaries = fetchSummaries
         self.deleteSession = deleteSession
         self.loadSession = loadSession
+        self.warmUpServer = warmUpServer
     }
 
     var body: some View {
@@ -57,7 +60,10 @@ struct RootView: View {
                 .offset(x: showDrawer ? 0 : -drawerWidth)
             }
         }
-        .task { await voiceViewModel.beginNewSession() }
+        .task {
+            Task { await warmUpServer() }
+            await voiceViewModel.beginNewSession()
+        }
     }
 
     private func open() {

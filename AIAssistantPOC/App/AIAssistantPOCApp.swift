@@ -47,8 +47,17 @@ struct AIAssistantPOCApp: App {
                 voiceViewModel: viewModel,
                 fetchSummaries: FetchSessionSummariesInteractor(repository: store),
                 deleteSession: DeleteSessionInteractor(repository: store),
-                loadSession: LoadSessionInteractor(repository: store)
+                loadSession: LoadSessionInteractor(repository: store),
+                warmUpServer: AIAssistantPOCApp.makeServerWarmUp()
             )
+        }
+    }
+
+    private static func makeServerWarmUp() -> any WarmUpServerConnectionUseCase {
+        WarmUpServerConnectionInteractor {
+            var request = URLRequest(url: serverBaseURL)
+            request.timeoutInterval = 3
+            _ = try? await URLSession.shared.data(for: request)
         }
     }
 
