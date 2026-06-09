@@ -75,7 +75,7 @@ def get_openai_client():
 
 def stream_openai(messages):
     client = get_openai_client()
-    model_name = os.environ.get("LLM_MODEL", "gpt-5.4-mini")
+    model_name = os.environ.get("LLM_MODEL", "gpt-5.5") # gpt-5.4-mini
     max_tokens = int(os.environ.get("LLM_MAX_TOKENS", "512"))
     completion = client.chat.completions.create(
         model=model_name,
