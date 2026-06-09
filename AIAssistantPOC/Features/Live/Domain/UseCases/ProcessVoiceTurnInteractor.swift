@@ -5,6 +5,9 @@
 
 import Foundation
 import VoiceAgentDomain
+import os
+
+private let perfSignposter = OSSignposter(subsystem: "AIAssistantPOC", category: "Performance")
 
 struct ProcessVoiceTurnInteractor: ProcessVoiceTurnUseCase {
 
@@ -46,7 +49,12 @@ struct ProcessVoiceTurnInteractor: ProcessVoiceTurnUseCase {
         _ audio: [Float],
         into continuation: AsyncThrowingStream<VoiceTurnEvent, Error>.Continuation
     ) async throws {
+        let signpostID = perfSignposter.makeSignpostID()
+        let interval = perfSignposter.beginInterval("VoiceTurn", id: signpostID, "samples=\(audio.count)")
+        defer { perfSignposter.endInterval("VoiceTurn", interval) }
+
         let userText = try await transcribe(audio)
+        perfSignposter.emitEvent("STT.done", id: signpostID, "chars=\(userText.count)")
         try Task.checkCancellation()
         guard !userText.isEmpty else { return }
 
@@ -54,12 +62,18 @@ struct ProcessVoiceTurnInteractor: ProcessVoiceTurnUseCase {
         await transcript.recordUserMessage(userText)
 
         var reply = ""
+        var firstTokenSeen = false
         for try await delta in generateReply(userText) {
             try Task.checkCancellation()
+            if !firstTokenSeen {
+                firstTokenSeen = true
+                perfSignposter.emitEvent("LLM.firstToken", id: signpostID)
+            }
             reply += delta
             continuation.yield(.replyDelta(delta))
         }
         try Task.checkCancellation()
+        perfSignposter.emitEvent("LLM.complete", id: signpostID, "chars=\(reply.count)")
 
         continuation.yield(.replyCompleted(reply))
         if !reply.isEmpty {
@@ -68,6 +82,7 @@ struct ProcessVoiceTurnInteractor: ProcessVoiceTurnUseCase {
 
         guard !reply.isEmpty else { return }
         continuation.yield(.speaking)
+        perfSignposter.emitEvent("TTS.begin", id: signpostID)
         try await synthesizer.speak(reply)
     }
 }
