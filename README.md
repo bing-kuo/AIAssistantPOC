@@ -292,7 +292,7 @@ cd VoiceAgentKit && swift test
 
 ## 未來規劃
 
-> 以下為**尚未實作**的功能，先定義概念與未來在現有架構上的實作方式。三者共同把系統從 turn-based 推向「隨時在場、可被打斷」的助理體驗。
+> 以下為**尚未實作**的功能，先定義概念與未來在現有架構上的實作方式——從互動模式（在場感知、連續對話、可打斷）到助理能力（工具調用）逐步擴充。
 
 ### 1. 人臉辨識觸發（Presence-Triggered Listening）
 
@@ -300,13 +300,15 @@ cd VoiceAgentKit && swift test
 
 **未來實作**：
 - 在 `VoiceAgentDomain` 新增 `PresenceDetecting` protocol（輸出 `presenceChanged(faces:)` 之類事件），維持 Domain 零框架。
-- 新增 `VisionFaceDetection` target，以 Apple **Vision** 框架（`VNDetectFaceRectanglesRequest`）實作，多人臉即回傳多個 bounding box。
+- 偵測引擎可二選一，各自獨立 target、由 Composition Root 注入（換引擎不動上層）：
+  - **`VisionFaceDetection`**：Apple **Vision**（`VNDetectFaceRectanglesRequest`），原生、零第三方依賴，多人臉回傳多個 bounding box。
+  - **`MLKitFaceDetection`**：Google **ML Kit Face Detection**，on-device、跨平台，內建臉部追蹤（tracking ID 可跨影格認出同一個人，多人場景很實用）與表情/睜眼分類；代價是引入第三方 SDK（iOS 主要走 CocoaPods、binary 較大）。
 - 由 Composition Root 注入，`VoiceSessionViewModel` 訂閱 presence 事件來驅動 `start()` / `stop()`，與現有麥克風生命週期接合。
 - 多人場景策略（最近的人 / 正面朝向 / 主講者）留在 detector 內，可獨立調整與測試。
 
-> 💡 **核心概念：Vision 人臉偵測**
+> 💡 **核心概念：on-device 人臉偵測（Vision / ML Kit）**
 > 
-> Apple Vision 框架可在 on-device 即時偵測人臉位置與特徵，隱私資料不離開裝置，適合「是否有人在場」這類觸發訊號。
+> 兩者都在裝置上即時偵測人臉、隱私資料不離開裝置，差別在 Vision 是原生零依賴、ML Kit 跨平台且功能更多（如臉部追蹤 tracking ID）。因為上層只依賴 `PresenceDetecting` protocol，選哪個、之後要不要換，都只動 Composition Root。
 
 ### 2. 自由麥克風（Free Microphone / 連續對話模式）
 
@@ -344,6 +346,24 @@ cd VoiceAgentKit && swift test
 > 💡 **核心概念：App Attest 與裝置完整性驗證**
 > 
 > App Attest 用裝置上的 Secure Enclave 產生無法被複製的金鑰，向 Apple 證明「這個請求確實來自我發布、且未被竄改或越獄環境下的 App」。它不是驗證「使用者是誰」，而是驗證「client 是不是真貨」，常用來保護高成本或易被濫用的後端 API。
+
+### 5. 工具調用（Tool Calling），讓助理能「做事」
+
+**概念**：目前助理只能「用對話內容回答」。導入 **tool calling**（function calling）後，LLM 可在需要時回傳「要呼叫哪個工具 + 參數」，由 app 執行該工具（本地端或後端），把結果回灌給 LLM 再產生最終回覆。助理就從「會聊天」升級成「會查資料、會做事」。例如：
+
+- **本地端資訊**（在裝置上、隱私不外流）：查通訊錄（「打給媽媽」「小明的電話」）、行事曆／提醒（「明天九點提醒我開會」）、定位、裝置設定。
+- **後端能力**：網頁搜尋（讓伺服器代打搜尋 API，回最新資訊），以及其他需要金鑰的服務（金鑰留在伺服器）。
+
+**未來實作**：
+- **Domain**：新增 `Tool` 抽象——每個工具一個 protocol（gateway），如 `ContactsReading`（查通訊錄）、`ReminderWriting`（建提醒）、`WebSearching`（後端搜尋），並定義工具 schema（名稱、參數）的 Entity。
+- **LLM 邊界**：`LLMResponding` 與 server proxy 擴充成支援 tool-call 協定（OpenAI function calling）——串流回傳可能是「文字 delta」或「tool call（工具名 + JSON 參數）」。
+- **編排**：`ProcessVoiceTurnUseCase` 的回覆流程改成 tool-call 迴圈：LLM →（要呼叫工具）→ 執行對應工具 → 把結果當一則 message 回灌 → LLM 收斂成最終回覆（多數情況一兩輪即結束）。
+- **本地工具**：各自獨立 target／gateway 實作（如以 `Contacts`、`EventKit` 包成 `ContactsReading`、`ReminderWriting`），與現有 per-vendor 模組一致，並補對應權限（`NSContactsUsageDescription` 等）。
+- **後端工具**（網頁搜尋）：放伺服器執行，沿用 proxy 模式把搜尋 API 金鑰留在後端。
+
+> 💡 **核心概念：Tool Calling（function calling）**
+> 
+> LLM 本身不會真的執行動作，它只「決定要呼叫哪個工具、給什麼參數」；實際執行與安全把關都在你的 app／後端，結果再交回 LLM 收斂成自然語言。這讓助理能碰即時、私有、或有副作用的能力，同時把「能做什麼」嚴格限制在你提供的工具集合內。
 
 ---
 
