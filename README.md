@@ -51,7 +51,7 @@ flowchart LR
 
 ## Demo
 
-▶ **[觀看 Demo 影片（Google Drive）](https://drive.google.com/file/d/1lZjHtpaoiNyDFpnfQeitfPOTfFvMj87a/view)**
+▶ **[觀看 Demo 影片（Google Drive）](https://drive.google.com/file/d/12XGCJq9BtuFZjNj51q380SI6zc0y4z5T/view)**
 
 影片流程：按下錄音 → 說話 → 即時字幕 → LLM 串流回覆 → 語音播放 → 回到聆聽，並從歷史訊息切回舊對話。
 
