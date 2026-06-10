@@ -107,7 +107,7 @@ public actor SpeechEndpointDetector: VoiceActivityDetecting {
 
         isSpeaking = true
         trailingSilenceMs = 0
-        utterance = leadingPad + window
+        utterance = leadingPad
         leadingPad.removeAll()
         IntelligenceLog.vad.info("Speech started (probability=\(probability, privacy: .public))")
         continuation.yield(.speechStarted)
@@ -141,7 +141,8 @@ public actor SpeechEndpointDetector: VoiceActivityDetecting {
 
     private func retainLeadingPad(_ window: [Float]) {
         leadingPad.append(contentsOf: window)
-        let maxPadSamples = Int(Double(configuration.speechPadMs) / 1_000 * Double(configuration.sampleRate))
+        let retainedMs = configuration.speechPadMs + configuration.minSpeechDurationMs
+        let maxPadSamples = Int(Double(retainedMs) / 1_000 * Double(configuration.sampleRate))
         if leadingPad.count > maxPadSamples {
             leadingPad.removeFirst(leadingPad.count - maxPadSamples)
         }

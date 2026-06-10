@@ -121,6 +121,41 @@ struct SpeechEndpointDetectorTests {
         #expect(events.isEmpty)
     }
 
+    @Test("retains the speech onset captured during the confirmation window")
+    func retainsOnsetDuringConfirmation() async {
+        // Given a 3-window confirmation (minSpeechDurationMs) with no extra pre-roll,
+        // and three distinctly-valued speech windows followed by trailing silence
+        let config = VADConfiguration(
+            sampleRate: 16_000,
+            windowSize: 512,
+            speechThreshold: 0.5,
+            silenceThreshold: 0.35,
+            minSilenceDurationMs: 64,
+            minSpeechDurationMs: 96,
+            speechPadMs: 0
+        )
+        let scorer = ScriptedScorer([0.9, 0.9, 0.9, 0.1, 0.1])
+        let sut = SpeechEndpointDetector(scorer: scorer, configuration: config)
+        let input = AsyncStream<[Float]> { continuation in
+            continuation.yield(window(0.11))
+            continuation.yield(window(0.22))
+            continuation.yield(window(0.33))
+            continuation.yield(window(0.0))
+            continuation.yield(window(0.0))
+            continuation.finish()
+        }
+
+        // When
+        let events = await collect(sut.events(from: input))
+
+        // Then the emitted segment starts at the very first speech window (onset not clipped)
+        guard case .speechEnded(let segment) = events.last else {
+            Issue.record("Expected speechEnded as the final event"); return
+        }
+        #expect(segment.count == 5 * 512)
+        #expect(segment.first == 0.11)
+    }
+
     @Test("reset clears state and resets the scorer")
     func resetForwardsToScorer() async {
         // Given

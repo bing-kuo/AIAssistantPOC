@@ -377,6 +377,7 @@ cd VoiceAgentKit && swift test
 | 嚴格輪流（half-duplex） | 助理說話時不收音；待[插話打斷](#3-插話打斷機制barge-in)實作 |
 | 單一語言播報 | 一段回覆用單一嗓音念，混語句子由該嗓音概括處理 |
 | 明文 HTTP | 僅供區網；對外需 TLS |
+| SwiftUI Previews 不可用 | App target 連結了 `onnxruntime`（binary framework，經 `SileroVAD`），Xcode 的 JIT preview executor 載入它會在啟動時 SIGTRAP，導致**此 target 任何 view 的 preview 都無法啟動**（正常 `⌘R`／測試不受影響）。UI 開發暫以執行 app 進行。根治需把 Presentation 抽成只依賴 `VoiceAgentDomain` 的獨立 SPM 模組 |
 | Local Network 權限 | 首次安裝連 LAN server（STT/LLM）會觸發 iOS Local Network 權限框，且觸發當下那個請求會被系統擋掉。已緩解：啟動時先暖身連一次 server 把權限框提早跳出（`WarmUpServerConnectionUseCase`），STT 並對 transport 錯誤自動重試一次。正式版改用有 DNS 名稱的雲端 HTTPS 端點即無此關卡 |
 
 ---

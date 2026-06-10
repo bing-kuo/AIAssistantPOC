@@ -36,7 +36,9 @@ public struct VADConfiguration: Sendable {
     /// Minimum sustained speech, in milliseconds, required to confirm a speech start.
     public var minSpeechDurationMs: Int
 
-    /// Leading audio, in milliseconds, retained ahead of a detected speech start.
+    /// Pre-roll audio, in milliseconds, retained ahead of the speech onset. The
+    /// detector additionally retains the ``minSpeechDurationMs`` confirmation
+    /// window, so the captured utterance is not clipped at its start.
     public var speechPadMs: Int
 
     /// Target RMS that each window is normalized to before scoring. Compensates
@@ -59,7 +61,7 @@ public struct VADConfiguration: Sendable {
         silenceThreshold: Float = 0.35,
         minSilenceDurationMs: Int = 700,
         minSpeechDurationMs: Int = 250,
-        speechPadMs: Int = 150,
+        speechPadMs: Int = 200,
         scoringTargetRMS: Float = 0.12,
         scoringNoiseFloorRMS: Float = 0.0015,
         maxScoringGain: Float = 40
