@@ -38,6 +38,7 @@ private func drain(_ stream: AsyncThrowingStream<String, Error>) async throws ->
     return accumulated
 }
 
+@MainActor
 @Suite("GenerateReplyInteractor")
 struct GenerateReplyInteractorTests {
 

@@ -17,10 +17,10 @@ private final class SpyRecognizer: SpeechRecognizing, @unchecked Sendable {
     init(result: Transcription) { self.result = result }
 
     func transcribe(_ audio: [Float], sampleRate: Int) async throws -> Transcription {
-        lock.lock()
-        capturedSampleRate = sampleRate
-        capturedCount = audio.count
-        lock.unlock()
+        lock.withLock {
+            capturedSampleRate = sampleRate
+            capturedCount = audio.count
+        }
         return result
     }
 
@@ -45,6 +45,7 @@ private actor ScriptedRecognizer: SpeechRecognizing {
     }
 }
 
+@MainActor
 @Suite("TranscribeUtteranceInteractor")
 struct TranscribeUtteranceInteractorTests {
 

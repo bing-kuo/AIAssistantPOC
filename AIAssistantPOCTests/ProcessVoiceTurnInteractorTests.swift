@@ -46,6 +46,7 @@ private func collect(_ stream: AsyncThrowingStream<VoiceTurnEvent, Error>) async
     return events
 }
 
+@MainActor
 @Suite("ProcessVoiceTurnInteractor")
 struct ProcessVoiceTurnInteractorTests {
 

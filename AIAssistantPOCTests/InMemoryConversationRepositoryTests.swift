@@ -8,6 +8,7 @@ import Testing
 import VoiceAgentDomain
 @testable import AIAssistantPOC
 
+@MainActor
 @Suite("InMemoryConversationRepository")
 struct InMemoryConversationRepositoryTests {
 

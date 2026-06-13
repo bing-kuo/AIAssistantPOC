@@ -12,6 +12,7 @@ private actor ProbeSpy {
     func record() { count += 1 }
 }
 
+@MainActor
 @Suite("WarmUpServerConnectionInteractor")
 struct WarmUpServerConnectionInteractorTests {
 

@@ -28,6 +28,7 @@ private actor SpyTranscript: ChatTranscriptRepository {
     func recordAssistantMessage(_ text: String) {}
 }
 
+@MainActor
 @Suite("StartNewConversationInteractor")
 struct StartNewConversationInteractorTests {
 
@@ -47,6 +48,7 @@ struct StartNewConversationInteractorTests {
     }
 }
 
+@MainActor
 @Suite("ResumeConversationInteractor")
 struct ResumeConversationInteractorTests {
 

@@ -40,6 +40,7 @@ private func summary(_ title: String) -> ChatSessionSummary {
     ChatSessionSummary(id: UUID(), title: title, updatedAt: Date(timeIntervalSince1970: 0), lastMessagePreview: "p")
 }
 
+@MainActor
 @Suite("FetchSessionSummariesInteractor")
 struct FetchSessionSummariesInteractorTests {
 
@@ -69,6 +70,7 @@ struct FetchSessionSummariesInteractorTests {
     }
 }
 
+@MainActor
 @Suite("DeleteSessionInteractor")
 struct DeleteSessionInteractorTests {
 
@@ -87,6 +89,7 @@ struct DeleteSessionInteractorTests {
     }
 }
 
+@MainActor
 @Suite("LoadSessionInteractor")
 struct LoadSessionInteractorTests {
 

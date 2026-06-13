@@ -29,6 +29,7 @@ private actor SpyWriter: ChatSessionWriteRepository {
     }
 }
 
+@MainActor
 @Suite("ChatTranscriptRecorder")
 struct ChatTranscriptRecorderTests {
 

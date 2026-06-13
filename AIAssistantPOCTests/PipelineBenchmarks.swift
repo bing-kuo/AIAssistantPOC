@@ -83,6 +83,7 @@ private func sampleUtterance(seconds: Double, sampleRate: Int) -> [Float] {
     }
 }
 
+@MainActor
 @Suite("PipelineBenchmarks")
 struct PipelineBenchmarks {
 

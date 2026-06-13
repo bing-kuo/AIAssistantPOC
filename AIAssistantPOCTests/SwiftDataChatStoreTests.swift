@@ -8,6 +8,7 @@ import SwiftData
 import Testing
 @testable import AIAssistantPOC
 
+@MainActor
 @Suite("SwiftDataChatStore")
 struct SwiftDataChatStoreTests {
 
