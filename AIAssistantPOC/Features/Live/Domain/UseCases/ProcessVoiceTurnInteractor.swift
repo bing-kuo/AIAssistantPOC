@@ -15,17 +15,20 @@ struct ProcessVoiceTurnInteractor: ProcessVoiceTurnUseCase {
     private let generateReply: any GenerateReplyUseCase
     private let synthesizer: any SpeechSynthesizing
     private let transcript: any ChatTranscriptRepository
+    private let voiceResponsesEnabled: @Sendable () async -> Bool
 
     init(
         transcribe: any TranscribeUtteranceUseCase,
         generateReply: any GenerateReplyUseCase,
         synthesizer: any SpeechSynthesizing,
-        transcript: any ChatTranscriptRepository
+        transcript: any ChatTranscriptRepository,
+        voiceResponsesEnabled: @escaping @Sendable () async -> Bool
     ) {
         self.transcribe = transcribe
         self.generateReply = generateReply
         self.synthesizer = synthesizer
         self.transcript = transcript
+        self.voiceResponsesEnabled = voiceResponsesEnabled
     }
 
     func callAsFunction(_ audio: [Float]) -> AsyncThrowingStream<VoiceTurnEvent, Error> {
@@ -81,6 +84,7 @@ struct ProcessVoiceTurnInteractor: ProcessVoiceTurnUseCase {
         }
 
         guard !reply.isEmpty else { return }
+        guard await voiceResponsesEnabled() else { return }
         continuation.yield(.speaking)
         perfSignposter.emitEvent("TTS.begin", id: signpostID)
         try await synthesizer.speak(reply)

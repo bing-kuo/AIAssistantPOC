@@ -59,7 +59,8 @@ struct ProcessVoiceTurnInteractorTests {
             transcribe: StubTranscribe(text: ""),
             generateReply: StubGenerateReply(deltas: ["unused"]),
             synthesizer: synthesizer,
-            transcript: transcript
+            transcript: transcript,
+            voiceResponsesEnabled: { true }
         )
 
         // When the turn runs
@@ -81,7 +82,8 @@ struct ProcessVoiceTurnInteractorTests {
             transcribe: StubTranscribe(text: "HELLO"),
             generateReply: StubGenerateReply(deltas: ["Hi", " there"]),
             synthesizer: synthesizer,
-            transcript: transcript
+            transcript: transcript,
+            voiceResponsesEnabled: { true }
         )
 
         // When the turn runs to completion
@@ -111,7 +113,8 @@ struct ProcessVoiceTurnInteractorTests {
             transcribe: StubTranscribe(text: "HELLO"),
             generateReply: StubGenerateReply(deltas: []),
             synthesizer: synthesizer,
-            transcript: transcript
+            transcript: transcript,
+            voiceResponsesEnabled: { true }
         )
 
         // When the turn runs
@@ -121,6 +124,33 @@ struct ProcessVoiceTurnInteractorTests {
         #expect(events == [.userTranscribed("HELLO"), .replyCompleted("")])
         #expect(await transcript.userMessages == ["HELLO"])
         #expect(await transcript.assistantMessages.isEmpty)
+        #expect(await synthesizer.spokenText == nil)
+    }
+
+    @Test("when voice responses are disabled the reply is shown and recorded but not spoken")
+    func voiceResponsesDisabled() async throws {
+        // Given a turn whose reply would normally be spoken, but voice responses are off
+        let synthesizer = SpySynthesizer()
+        let transcript = SpyTranscript()
+        let sut = ProcessVoiceTurnInteractor(
+            transcribe: StubTranscribe(text: "HELLO"),
+            generateReply: StubGenerateReply(deltas: ["Hi", " there"]),
+            synthesizer: synthesizer,
+            transcript: transcript,
+            voiceResponsesEnabled: { false }
+        )
+
+        // When the turn runs
+        let events = try await collect(sut([0.2, 0.2]))
+
+        // Then the reply is emitted and recorded, but there is no speaking event and nothing is spoken
+        #expect(events == [
+            .userTranscribed("HELLO"),
+            .replyDelta("Hi"),
+            .replyDelta(" there"),
+            .replyCompleted("Hi there"),
+        ])
+        #expect(await transcript.assistantMessages == ["Hi there"])
         #expect(await synthesizer.spokenText == nil)
     }
 }

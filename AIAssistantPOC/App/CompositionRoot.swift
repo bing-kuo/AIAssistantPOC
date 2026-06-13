@@ -20,11 +20,12 @@ struct CompositionRoot {
         let store = makeStore()
         let conversation = InMemoryConversationRepository()
         let transcript = ChatTranscriptRecorder(writer: store)
+        let preferences = UserDefaultsPreferencesStore(serverDisplayURL: Self.serverBaseURL.absoluteString)
 
         return AppCoordinator(
-            voice: makeVoiceViewModel(conversation: conversation, transcript: transcript),
+            voice: makeVoiceViewModel(conversation: conversation, transcript: transcript, preferences: preferences),
             sessionList: makeSessionList(store: store),
-            makeSettings: { self.makeSettings() },
+            makeSettings: { self.makeSettings(preferences: preferences) },
             warmUpServer: makeServerWarmUp()
         )
     }
@@ -39,22 +40,22 @@ struct CompositionRoot {
 
     private func makeVoiceViewModel(
         conversation: any ConversationRepository,
-        transcript: any ChatTranscriptRepository
+        transcript: any ChatTranscriptRepository,
+        preferences: UserDefaultsPreferencesStore
     ) -> VoiceSessionViewModel {
         VoiceSessionViewModel(
             recorder: AudioEngineRecorder(),
             detector: makeDetector(),
-            processTurn: makeProcessTurn(conversation: conversation, transcript: transcript),
+            processTurn: makeProcessTurn(conversation: conversation, transcript: transcript, preferences: preferences),
             startNew: StartNewConversationInteractor(conversation: conversation, transcript: transcript),
             resume: ResumeConversationInteractor(conversation: conversation, transcript: transcript)
         )
     }
 
-    private func makeSettings() -> SettingsViewModel {
-        let store = UserDefaultsPreferencesStore(serverDisplayURL: Self.serverBaseURL.absoluteString)
-        return SettingsViewModel(
-            fetchPreferences: FetchPreferencesInteractor(repository: store),
-            updatePreferences: UpdatePreferencesInteractor(repository: store)
+    private func makeSettings(preferences: UserDefaultsPreferencesStore) -> SettingsViewModel {
+        SettingsViewModel(
+            fetchPreferences: FetchPreferencesInteractor(repository: preferences),
+            updatePreferences: UpdatePreferencesInteractor(repository: preferences)
         )
     }
 
@@ -87,7 +88,8 @@ struct CompositionRoot {
 
     private func makeProcessTurn(
         conversation: any ConversationRepository,
-        transcript: any ChatTranscriptRepository
+        transcript: any ChatTranscriptRepository,
+        preferences: UserDefaultsPreferencesStore
     ) -> any ProcessVoiceTurnUseCase {
         let recognizer = WhisperSpeechRecognizer(configuration: WhisperConfiguration(baseURL: Self.serverBaseURL))
         let responder = ProxyLLMResponder(configuration: LLMConfiguration(baseURL: Self.serverBaseURL))
@@ -99,7 +101,8 @@ struct CompositionRoot {
                 systemPrompt: Self.systemPrompt
             ),
             synthesizer: AppleSpeechSynthesizer.live(),
-            transcript: transcript
+            transcript: transcript,
+            voiceResponsesEnabled: { await preferences.load().voiceResponsesEnabled }
         )
     }
 
