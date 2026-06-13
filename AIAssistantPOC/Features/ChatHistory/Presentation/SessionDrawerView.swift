@@ -10,22 +10,24 @@ struct SessionDrawerView: View {
     private let onClose: () -> Void
     private let onNewSession: () -> Void
     private let onSelect: (UUID) -> Void
+    private let onOpenSettings: () -> Void
 
     @State private var viewModel: SessionListViewModel
 
     init(
-        fetchSummaries: any FetchSessionSummariesUseCase,
-        deleteSession: any DeleteSessionUseCase,
+        viewModel: SessionListViewModel,
         isPresented: Bool,
         onClose: @escaping () -> Void,
         onNewSession: @escaping () -> Void,
-        onSelect: @escaping (UUID) -> Void
+        onSelect: @escaping (UUID) -> Void,
+        onOpenSettings: @escaping () -> Void
     ) {
         self.isPresented = isPresented
         self.onClose = onClose
         self.onNewSession = onNewSession
         self.onSelect = onSelect
-        _viewModel = State(initialValue: SessionListViewModel(fetchSummaries: fetchSummaries, deleteSession: deleteSession))
+        self.onOpenSettings = onOpenSettings
+        _viewModel = State(initialValue: viewModel)
     }
 
     var body: some View {
@@ -34,6 +36,12 @@ struct SessionDrawerView: View {
                 content
             }
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onOpenSettings) {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("settings.open")
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: onClose) {
                         Image(systemName: "xmark")
@@ -107,11 +115,15 @@ extension View {
 #Preview {
     let store = PreviewChatStore()
     return SessionDrawerView(
-        fetchSummaries: FetchSessionSummariesInteractor(repository: store),
-        deleteSession: DeleteSessionInteractor(repository: store),
+        viewModel: SessionListViewModel(
+            fetchSummaries: FetchSessionSummariesInteractor(repository: store),
+            deleteSession: DeleteSessionInteractor(repository: store),
+            loadSession: LoadSessionInteractor(repository: store)
+        ),
         isPresented: true,
         onClose: {},
         onNewSession: {},
-        onSelect: { _ in }
+        onSelect: { _ in },
+        onOpenSettings: {}
     )
 }

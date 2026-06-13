@@ -6,28 +6,9 @@
 import SwiftUI
 
 struct RootView: View {
-    @State private var voiceViewModel: VoiceSessionViewModel
-    @State private var showDrawer = false
-    private let fetchSummaries: any FetchSessionSummariesUseCase
-    private let deleteSession: any DeleteSessionUseCase
-    private let loadSession: any LoadSessionUseCase
-    private let warmUpServer: any WarmUpServerConnectionUseCase
+    let coordinator: AppCoordinator
 
     private let transition = Animation.spring(response: 0.35, dampingFraction: 0.86)
-
-    init(
-        voiceViewModel: VoiceSessionViewModel,
-        fetchSummaries: any FetchSessionSummariesUseCase,
-        deleteSession: any DeleteSessionUseCase,
-        loadSession: any LoadSessionUseCase,
-        warmUpServer: any WarmUpServerConnectionUseCase
-    ) {
-        _voiceViewModel = State(initialValue: voiceViewModel)
-        self.fetchSummaries = fetchSummaries
-        self.deleteSession = deleteSession
-        self.loadSession = loadSession
-        self.warmUpServer = warmUpServer
-    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -35,55 +16,54 @@ struct RootView: View {
 
             ZStack(alignment: .leading) {
                 NavigationStack {
-                    RecorderView(viewModel: voiceViewModel)
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarLeading) {
-                                Button { open() } label: {
-                                    Image(systemName: "clock.arrow.circlepath")
-                                }
-                                .accessibilityLabel("history.button")
-                            }
-                        }
+                    rootContent
                 }
 
                 SessionDrawerView(
-                    fetchSummaries: fetchSummaries,
-                    deleteSession: deleteSession,
-                    isPresented: showDrawer,
-                    onClose: { close() },
-                    onNewSession: { Task { await startNewSession() } },
-                    onSelect: { id in Task { await selectSession(id) } }
+                    viewModel: coordinator.sessionList,
+                    isPresented: coordinator.isHistoryPresented,
+                    onClose: { coordinator.closeHistory() },
+                    onNewSession: { Task { await coordinator.startNewSession() } },
+                    onSelect: { id in Task { await coordinator.selectSession(id) } },
+                    onOpenSettings: { coordinator.openSettings() }
                 )
                 .frame(width: drawerWidth, height: proxy.size.height)
                 .background(.background)
-                .offset(x: showDrawer ? 0 : -drawerWidth)
+                .offset(x: coordinator.isHistoryPresented ? 0 : -drawerWidth)
             }
+            .animation(transition, value: coordinator.isHistoryPresented)
         }
         .task {
-            Task { await warmUpServer() }
-            await voiceViewModel.beginNewSession()
+            Task { await coordinator.warmUp() }
+            await coordinator.voice.beginNewSession()
         }
     }
 
-    private func open() {
-        withAnimation(transition) { showDrawer = true }
-    }
-
-    private func close() {
-        withAnimation(transition) {
-            showDrawer = false
+    @ViewBuilder private var rootContent: some View {
+        switch coordinator.rootDestination {
+        case .live:
+            RecorderView(viewModel: coordinator.voice)
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { coordinator.openHistory() } label: {
+                            Image(systemName: "clock.arrow.circlepath")
+                        }
+                        .accessibilityLabel("history.button")
+                    }
+                }
+        case .settings:
+            if let settings = coordinator.settings {
+                SettingsView(viewModel: settings)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { coordinator.closeSettings() } label: {
+                                Image(systemName: "chevron.left")
+                            }
+                            .accessibilityLabel("settings.back")
+                        }
+                    }
+            }
         }
-    }
-
-    private func startNewSession() async {
-        close()
-        await voiceViewModel.beginNewSession()
-    }
-
-    private func selectSession(_ id: UUID) async {
-        close()
-        guard let session = await loadSession(id) else { return }
-        await voiceViewModel.resume(session)
     }
 }
