@@ -3,7 +3,7 @@
 ## 1. Core Stack & Technology
 - **UI Framework:** SwiftUI (utilizing `@Observable`)
 - **Architecture:** Clean Architecture + MVVM
-- **Language Version:** Swift 6 (Strict Concurrency & Data Race Safety enforced)
+- **Language Version:** Swift 6 across both the app target and `VoiceAgentKit`, under two deliberately different default-isolation regimes (see §6).
 - **Concurrency:** Modern Swift Concurrency (`async`/`await`, `Task`, `actor`, `@MainActor`)
 - **Deployment Target:** iOS 26.0+
 - **Test Framework:** Swift Testing
@@ -58,6 +58,8 @@ Entities and interfaces shared across features live in `Shared/Domain/`.
 | External-service port / gateway | gerund (`SpeechRecognizing`, `LLMResponding`) | `VoiceAgentDomain` (Kit) |
 | Use Case | protocol `<Verb><Noun>UseCase` + impl `<Verb><Noun>Interactor` | Domain/UseCases |
 | ViewModel | `<Feature>ViewModel` | Presentation |
+| App Coordinator | `AppCoordinator` (one per app) | `App/` |
+| Composition Root | `CompositionRoot` (assembly) | `App/` |
 
 Repository vs gateway: accessing data the app persists itself (conversations, sessions, history) is a **Repository** (use the suffix); talking to an external system/device (STT/LLM/TTS/microphone) is a **gateway port** (use a gerund; lives in the Kit).
 
@@ -83,11 +85,17 @@ This package contains the core infrastructure and domain logic. The Domain layer
 - **`ProxyLLM` Target:** Pure stateless networking layer for the LLM (SSE streams) implementing `LLMResponding`. Kept separate from `WhisperSTT` so STT and LLM have single responsibilities and can each be replaced independently. Strictly no UI or `AVFoundation` imports.
 - **`AppleTTS` Target:** An `AVSpeechSynthesizer` wrapper implementing `SpeechSynthesizing` for real-time text-to-speech synthesis and playback control. `AVFoundation` is isolated to the speaker wrapper file only.
 
-### 4.2 Main App Target (Presentation Only)
-- Acts solely as the Composition Root and Presentation Layer.
-- Houses SwiftUI Views and `@Observable` ViewModels, plus app-level orchestration (`ConversationManaging`, `SpeechPipeline`).
-- Views and ViewModels depend ONLY on `VoiceAgentDomain` abstractions (and `SwiftUI`/`Observation`); they must NOT import concrete modules (`AVAudioCapture`, `SileroVAD`, etc.).
-- Only the Composition Root (`AIAssistantPOCApp`) imports the concrete targets and injects them into ViewModels via the Domain protocols.
+### 4.2 Main App Target (Presentation + Composition Root)
+- Houses SwiftUI Views, `@Observable` ViewModels, the per-feature Domain/Data layers, one App Coordinator, and the Composition Root. A turn of the voice pipeline is itself a Use Case (`ProcessVoiceTurnInteractor`), not a free-standing orchestrator object.
+- Views and ViewModels depend ONLY on `VoiceAgentDomain` abstractions and feature Use Case protocols (plus `SwiftUI`/`Observation`); they must NOT import concrete Kit modules (`AVAudioCapture`, `SileroVAD`, `WhisperSTT`, `ProxyLLM`, `AppleTTS`, etc.).
+- **`CompositionRoot` (`App/CompositionRoot.swift`)** is the ONLY type that imports the concrete Kit targets. It builds the dependency graph (stores, repositories, gateways, interactors, ViewModels) and returns a fully-wired `AppCoordinator`. It is the single place a concrete implementation may be named.
+- **`AIAssistantPOCApp` (`@main`)** is a thin entry point only: it calls `CompositionRoot().makeAppCoordinator()` and hands the coordinator to `RootView`. No wiring logic lives here.
+
+#### App Coordinator (`AppCoordinator`)
+- A single `@MainActor @Observable` app-level coordinator that owns the child ViewModels (`voice`, `sessionList`, lazily-built `settings`), holds cross-feature navigation state (`rootDestination`, history drawer), and exposes intent methods the root view calls.
+- It is the ONE place permitted to hold other ViewModels — this is the documented exception to the "a type in Presentation owns only its own state" expectation, and it exists so individual ViewModels stay unaware of each other and of navigation.
+- Its own business dependencies must still be **Use Case protocols** (e.g. `WarmUpServerConnectionUseCase`); like a ViewModel it must NOT depend on a Repository or gateway directly.
+- Keep it a coordinator, not a god object: it routes and sequences (open/close, start/select session, warm-up) but contains no STT/LLM/TTS logic — that stays in Use Cases.
 
 ## 5. TDD (Test-Driven Development) Specification
 When requested to implement new features, strictly follow the **Red-Green-Refactor** cycle:
@@ -102,11 +110,18 @@ When requested to implement new features, strictly follow the **Red-Green-Refact
 - ViewModel tests must cover all state mutations; Use Case tests must cover both success and comprehensive error-handling paths.
 
 ## 6. Swift 6 & Concurrency Rules
-- Adhere fully to Swift 6 data race safety rules. Complete concurrency checking must be enabled.
-- Completely ban `DispatchQueue` and completion handler closures; use `async/await` exclusively.
+Both the app target and `VoiceAgentKit` build in Swift 6 language mode (full data-race safety). They differ ONLY in **default actor isolation**, and that difference is intentional — do not try to "unify" it:
+
+### 6.1 Two isolation regimes
+- **App target — MainActor-by-default.** Built with `SWIFT_VERSION = 6.0`, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, and `SWIFT_APPROACHABLE_CONCURRENCY = YES`. Every unannotated declaration is implicitly `@MainActor`, which is the right default for Views, ViewModels, and the App Coordinator. Consequently, any type that must live **off** the main actor — pure domain entities, SwiftData `@Model` classes, store/repository types used inside an `actor`/`@ModelActor`, and `static` helpers — MUST be explicitly marked `nonisolated` (e.g. `nonisolated struct ChatMessage`, `@Model nonisolated final class SessionRecord`). Omitting it silently pins data to the main actor and breaks off-main use.
+- **VoiceAgentKit — nonisolated-by-default.** Each target sets `.swiftLanguageMode(.v6)` with no `defaultIsolation`, so declarations are nonisolated unless they opt in. Kit ports (`AudioRecording`, `SpeechRecognizing`, `LLMResponding`, …) and their entities stay isolation-free so they compose from any context; hardware/shared mutable state is protected with `actor` (e.g. `AudioEngineRecorder`).
+
+### 6.2 Rules that apply to both
+- Adhere fully to Swift 6 data-race safety; complete concurrency checking is on in every target.
+- Completely ban `DispatchQueue` and completion-handler closures; use `async/await` exclusively. Inside an `async` method, never call bare `NSLock.lock()/unlock()` — use `lock.withLock { }`.
 - Always check for task cancellation (`Task.isCancelled`) when bridging asynchronous code via `Task`.
-- Explicitly decorate all UI-bound classes and methods with `@MainActor`.
-- Protect mutable shared state using `actor` or `@MainActor` to prevent data races. Ensure all types passing through concurrency boundaries conform to `Sendable`.
+- In the app target, rely on the MainActor default for UI-bound types rather than re-annotating; reach for `@MainActor` explicitly only where the default does not already apply.
+- Protect mutable shared state using `actor` (or, for UI state, the MainActor). Ensure every type crossing a concurrency boundary conforms to `Sendable`.
 
 ## 7. AI Response Requirements
 - Briefly outline your architectural design approach before presenting the implementation code.
