@@ -9,12 +9,16 @@ import Testing
 
 private actor MockChatStore: ChatSessionReadRepository, ChatSessionWriteRepository {
     private var stored: [ChatSessionSummary]
+    private let sessions: [UUID: ChatSession]
     private(set) var deleted: [UUID] = []
 
-    init(summaries: [ChatSessionSummary] = []) { self.stored = summaries }
+    init(summaries: [ChatSessionSummary] = [], sessions: [ChatSession] = []) {
+        self.stored = summaries
+        self.sessions = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+    }
 
     func summaries() async throws -> [ChatSessionSummary] { stored }
-    func session(id: UUID) async throws -> ChatSession? { nil }
+    func session(id: UUID) async throws -> ChatSession? { sessions[id] }
     func createSession(title: String, firstMessage: ChatMessage) async throws -> UUID { UUID() }
     func append(_ message: ChatMessage, to sessionID: UUID) async throws {}
 
@@ -35,7 +39,8 @@ struct SessionListViewModelTests {
     private func makeViewModel(_ store: MockChatStore) -> SessionListViewModel {
         SessionListViewModel(
             fetchSummaries: FetchSessionSummariesInteractor(repository: store),
-            deleteSession: DeleteSessionInteractor(repository: store)
+            deleteSession: DeleteSessionInteractor(repository: store),
+            loadSession: LoadSessionInteractor(repository: store)
         )
     }
 
@@ -80,5 +85,37 @@ struct SessionListViewModelTests {
 
         // Then the list is empty
         #expect(sut.summaries.isEmpty)
+    }
+
+    @Test("resolve returns the full session for a known id")
+    func resolveReturnsSession() async {
+        // Given a store holding a session
+        let id = UUID()
+        let session = ChatSession(
+            id: id,
+            title: "T",
+            createdAt: Date(timeIntervalSince1970: 0),
+            updatedAt: Date(timeIntervalSince1970: 0),
+            messages: [ChatMessage(role: .assistant, text: "hi")]
+        )
+        let sut = makeViewModel(MockChatStore(sessions: [session]))
+
+        // When resolving its id
+        let resolved = await sut.resolve(id)
+
+        // Then the full session is returned
+        #expect(resolved?.id == id)
+    }
+
+    @Test("resolve returns nil for an unknown id")
+    func resolveUnknownReturnsNil() async {
+        // Given a store with no sessions
+        let sut = makeViewModel(MockChatStore())
+
+        // When resolving an unknown id
+        let resolved = await sut.resolve(UUID())
+
+        // Then nothing is returned
+        #expect(resolved == nil)
     }
 }
