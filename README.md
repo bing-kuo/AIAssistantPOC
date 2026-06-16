@@ -72,11 +72,11 @@ flowchart LR
 
 ## 模組與職責總覽
 
-為了實踐嚴格的 Clean Architecture，本專案把**可重用的語音基礎設施**（抽象 ports 與各 vendor 實作）放進本機 SPM 套件 (`VoiceAgentKit`)；App Main Target 則承載 **Composition Root**、**Presentation**，以及應用自身的 **Domain 層（Use Cases + Repository）**。
+為了實踐嚴格的 Clean Architecture，本專案把**可重用的語音基礎設施**（抽象 ports 與各 vendor 實作）放進本機 SPM 套件 (`VoiceAgentKit`)；App Main Target 則承載 **Composition Root**、**App Coordinator**、**Presentation**，以及應用自身的 **Domain 層（Use Cases + Repository）**。
 
 | Module | Role / Layer | Responsibility | Links |
 | --- | --- | --- | --- |
-| **AIAssistantPOC**（Main Target） | Presentation + App Domain + Composition Root | SwiftUI 畫面、`@Observable` ViewModel、狀態機；**Use Cases + Repository**（一輪對話的業務邏輯）；組裝並注入所有依賴 | [Main Target 架構設計](#main-target-架構設計) |
+| **AIAssistantPOC**（Main Target） | Presentation + App Domain + App Coordinator + Composition Root | SwiftUI 畫面、`@Observable` ViewModel、狀態機；三個 feature（Live 即時對話、ChatHistory 歷史、Settings 設定）各自的 **Use Cases + Repository**；`AppCoordinator` 持有子 ViewModel 與跨功能導覽，`CompositionRoot` 組裝並注入所有依賴 | [Main Target 架構設計](#main-target-架構設計) |
 | **VoiceAgentDomain** | Ports + Entities（純 Swift） | STT/LLM/TTS/錄音/VAD 的抽象 ports 與 Entity，是 Use Case 依賴的 gateway；零框架依賴 | [Module_VoiceAgentDomain](docs/Module_VoiceAgentDomain.md) |
 | **AVAudioCapture** | Data／音訊硬體 | 麥克風擷取、降採樣到 16kHz、產生 `AudioFrame` 串流 | [Module_AVAudioCapture](docs/Module_AVAudioCapture.md) |
 | **VoiceActivityDetection** | Data／斷句邏輯 | 把連續音訊切成「一句完整的話」（endpointing），中立純邏輯 | [Module_VoiceActivityDetection](docs/Module_VoiceActivityDetection.md) |
@@ -94,28 +94,35 @@ flowchart LR
 
 > 這一節聚焦 **App Target（`AIAssistantPOC/`）** 本身。模組內部與跨模組依賴細節見 [系統架構](docs/Architecture.md)。
 
-App target 扮演三個角色：**Composition Root**、**Presentation（畫面與狀態）**，以及應用自身的 **Domain 層（Use Cases + Repository Interface）**。所有「怎麼錄音、怎麼斷句、怎麼辨識」的 vendor 細節都在 VoiceAgentKit，App 端看不到、也不該看到。
+App target 扮演四個角色：**Composition Root（組裝依賴）**、**App Coordinator（協調與導覽）**、**Presentation（畫面與狀態）**，以及應用自身的 **Domain 層（Use Cases + Repository Interface）**。所有「怎麼錄音、怎麼斷句、怎麼辨識」的 vendor 細節都在 VoiceAgentKit，App 端看不到、也不該看到。
 
 ### 分層
 
 ```
 AIAssistantPOC/
-├── App/                      # Composition Root：組裝依賴、注入 ViewModel
-│   ├── AIAssistantPOCApp.swift    # @main，唯一 import 具體模組的地方
+├── App/                      # 進入點 + 組裝 + 協調
+│   ├── AIAssistantPOCApp.swift    # @main，僅呼叫 CompositionRoot 並把 coordinator 交給 RootView
+│   ├── CompositionRoot.swift      # 唯一 import 具體 Kit 模組的地方：組好依賴圖、回傳 AppCoordinator
+│   ├── AppCoordinator.swift       # 持有子 ViewModel、跨功能導覽（rootDestination / 歷史抽屜）
 │   └── RootView.swift             # 畫面骨架 + 側選單
 ├── Shared/Domain/            # App 層共用 Entity 與介面（ChatMessage / ChatSession / ChatTranscriptRepository…）
 └── Features/
     ├── Live/                 # 即時語音對話
     │   ├── Domain/
-    │   │   ├── UseCases/          # ProcessVoiceTurn / GenerateReply / Transcribe…（業務邏輯）
+    │   │   ├── UseCases/          # ProcessVoiceTurn / GenerateReply / Transcribe / WarmUpServerConnection…
     │   │   └── Repositories/      # ConversationRepository（介面）
     │   ├── Data/                  # InMemoryConversationRepository（Repository 實作）
     │   ├── Presentation/          # VoiceSessionViewModel、SessionState、Views
     │   └── Preview/               # 全套 mock，供 SwiftUI Preview 使用
-    └── ChatHistory/          # 對話歷史（SwiftData）
-        ├── Domain/                # ChatSessionRead/WriteRepository（介面）、Fetch/Delete/Load…UseCase
-        ├── Data/                  # SwiftDataChatStore、ChatTranscriptRecorder（實作）
-        ├── Presentation/  
+    ├── ChatHistory/          # 對話歷史（SwiftData）
+    │   ├── Domain/                # ChatSessionRead/WriteRepository（介面）、Fetch/Delete/Load…UseCase
+    │   ├── Data/                  # SwiftDataChatStore、ChatTranscriptRecorder（實作）
+    │   ├── Presentation/          # SessionListViewModel、歷史抽屜 Views
+    │   └── Preview/
+    └── Settings/             # 偏好設定（語音回覆開關、伺服器位址顯示）
+        ├── Domain/                # PreferencesRead/WriteRepository（介面）、Fetch/UpdatePreferencesUseCase
+        ├── Data/                  # UserDefaultsPreferencesStore（實作）
+        ├── Presentation/          # SettingsViewModel、SettingsView
         └── Preview/
 ```
 
@@ -125,7 +132,11 @@ AIAssistantPOC/
 
 > 💡 **核心概念：Composition Root**
 > 
-> 整個 App 只有一個地方知道「哪個 protocol 要用哪個實作」——就是 `AIAssistantPOCApp`。它把 `AudioEngineRecorder`、`SileroVAD`、`WhisperSpeechRecognizer`… 這些具體實作組好，透過protocol 型別注入 ViewModel。其餘檔案只 `import VoiceAgentDomain`，看到的全是抽象。要換掉任何一塊（例如改用 on-device STT），只改這一個檔案。
+> 整個 App 只有一個地方知道「哪個 protocol 要用哪個實作」——就是 `CompositionRoot`。它把 `AudioEngineRecorder`、`SileroVAD`、`WhisperSpeechRecognizer`… 這些具體實作組好，透過 protocol 型別注入各 Use Case 與 ViewModel，最後回傳一個接好線的 `AppCoordinator`。`@main` 的 `AIAssistantPOCApp` 只呼叫 `CompositionRoot().makeAppCoordinator()`，其餘檔案只 `import VoiceAgentDomain`，看到的全是抽象。要換掉任何一塊（例如改用 on-device STT），只改這一個檔案。
+
+> 💡 **核心概念：App Coordinator**
+> 
+> `AppCoordinator`（`@MainActor @Observable`）是唯一被允許同時持有多個子 ViewModel（`voice`、`sessionList`、延遲建立的 `settings`）的型別，負責跨功能的導覽狀態（`rootDestination`、歷史抽屜開關）與意圖方法（開新對話、選歷史、開設定、啟動暖身）。它讓各 ViewModel 彼此互不知道、也不認得導覽。它自身的業務依賴一樣只能是 **Use Case protocol**（例如 `WarmUpServerConnectionUseCase`），不直接碰 Repository 或 gateway——它只路由與串接，STT/LLM/TTS 邏輯仍留在 Use Case。
 
 ### 核心：`VoiceSessionViewModel` 如何編排一輪對話
 
@@ -169,12 +180,15 @@ sequenceDiagram
 - **`GenerateReplyUseCase`**：組 `system prompt + 歷史 + user`，串流 LLM，完成後把這輪寫回 Repository。
 - **`TranscribeUtteranceUseCase`**：把「語音 → 文字」包成單一步驟（包裝 `SpeechRecognizing`）。
 - **`StartNewConversationUseCase` / `ResumeConversationUseCase`**：對話生命週期（重置 / 還原歷史）。
+- **`WarmUpServerConnectionUseCase`**：啟動時暖身連一次 server，把 iOS Local Network 權限框提早跳出（由 `AppCoordinator` 呼叫）。
 
 對應的 **Repository**（介面在 `Domain/Repositories/`，實作在 `Data/`）：
 
 - **`ConversationRepository`**（介面，Domain）→ 由 **`InMemoryConversationRepository`**（`actor`，Data）實作：純對話歷史存取，含滑動視窗截斷（預設保留最近 12 則）。LLM 串流不再混在這裡——歷史是「資料」，呼叫模型是 Use Case 的事。
 
-ChatHistory 功能同樣遵循這套：`ChatSessionReadRepository` / `ChatSessionWriteRepository`（介面）由 `SwiftDataChatStore` 實作，並透過 `FetchSessionSummariesUseCase` / `DeleteSessionUseCase` / `LoadSessionUseCase` 讓 `SessionListViewModel`、`RootView` 不直接碰 Repository。
+ChatHistory 功能同樣遵循這套：`ChatSessionReadRepository` / `ChatSessionWriteRepository`（介面）由 `SwiftDataChatStore` 實作，並透過 `FetchSessionSummariesUseCase` / `DeleteSessionUseCase` / `LoadSessionUseCase` 讓 `SessionListViewModel` 不直接碰 Repository。
+
+Settings 功能亦然：`PreferencesReadRepository` / `PreferencesWriteRepository`（介面）由 `UserDefaultsPreferencesStore` 實作，`FetchPreferencesUseCase` / `UpdatePreferencesUseCase` 餵給 `SettingsViewModel`；其中的 `voiceResponsesEnabled` 由 Live 端讀取，用來決定一輪對話是否播放 TTS。
 
 > 💡 **核心概念：UseCase / Repository / Domain 的分工**
 > 
